@@ -39,17 +39,17 @@ class Model(nn.Module):
                             bias=True
                             )
 
-        self.bw_w_rnn = nn.LSTMCell(
-                            input_size=config.w_em_size,
-                            hidden_size=config.w_rnn_units,
-                            bias=True
-                            )
+        #self.bw_w_rnn = nn.LSTMCell(
+        #                    input_size=config.w_em_size,
+        #                    hidden_size=config.w_rnn_units,
+        #                    bias=True
+        #                    )
 
-        self.dense = nn.Linear(
-                            2 * config.w_rnn_units,
-                            config.w_rnn_units,
-                            bias=True
-                            )
+        #self.dense = nn.Linear(
+        #                    config.w_rnn_units,
+        #                    config.w_rnn_units,
+        #                    bias=True
+        #                    )
 
         self.indp_affine = nn.Linear(
                             config.w_rnn_units,
@@ -75,13 +75,13 @@ class Model(nn.Module):
         #    if 'weight' in name:
         #        init.orthogonal(param)
 
-        for name, param in self.fw_w_rnn.named_parameters():
-            if 'weight' in name:
-                init.orthogonal(param)
+        #for name, param in self.fw_w_rnn.named_parameters():
+        #    if 'weight' in name:
+        #        init.orthogonal(param)
 
-        for name, param in self.bw_w_rnn.named_parameters():
-            if 'weight' in name:
-                init.orthogonal(param)
+        #for name, param in self.bw_w_rnn.named_parameters():
+        #    if 'weight' in name:
+        #        init.orthogonal(param)
 
         return
 
@@ -212,8 +212,8 @@ class Model(nn.Module):
 
     def encoder(self, config):
         features = self.features(config).view(config.max_s_len, -1, config.w_em_size)
-        w_fhx = Variable(torch.zeros(features.size()[1], features.size()[2]).cuda())
-        w_fcx = Variable(torch.zeros(features.size()[1], features.size()[2]).cuda())
+        w_fhx = Variable(torch.zeros(self.b_size, config.w_rnn_units).cuda())
+        w_fcx = Variable(torch.zeros(self.b_size, config.w_rnn_units).cuda())
         outputs = []
         for i in range(config.max_s_len):
             w_fhx, w_fcx = self.fw_w_rnn(features[i], (w_fhx, w_fcx))
@@ -221,37 +221,38 @@ class Model(nn.Module):
 
         fw_w_h = torch.stack(outputs, dim=1)
 
-        w_bhx = Variable(torch.zeros(features.size()[1], features.size()[2]).cuda())
-        w_bcx = Variable(torch.zeros(features.size()[1], features.size()[2]).cuda())
-        outputs = []
-        for i in reversed(range(config.max_s_len)):
-            w_bhx, w_bcx = self.bw_w_rnn(features[i], (w_bhx, w_bcx))
-            outputs.append(w_bhx)
+        #w_bhx = Variable(torch.zeros(self.b_size, config.w_rnn_units).cuda())
+        #w_bcx = Variable(torch.zeros(self.b_size, config.w_rnn_units).cuda())
+        #outputs = []
+        #for i in reversed(range(config.max_s_len)):
+        #    w_bhx, w_bcx = self.bw_w_rnn(features[i], (w_bhx, w_bcx))
+        #    outputs.append(w_bhx)
 
-        bw_w_h = torch.stack(outputs, dim=1)
+        #bw_w_h = torch.stack(outputs, dim=1)
 
-        h_out = torch.cat((fw_w_h, bw_w_h), 2)
-        h_out_dr = nn.Dropout(self.p)(h_out)
+        #h_out = torch.cat((fw_w_h, bw_w_h), 2)
+        #h_out_dr = nn.Dropout(self.p)(h_out)
         #mask = self.w_mask.view(-1, config.max_s_len, 1).expand(-1, config.max_s_len, 2 * config.w_rnn_units)
         #HH = h_out_dr * mask
-        HH = h_out_dr
-        H = torch.tanh(self.dense(HH))
-        return H
+        #HH = h_out_dr
+        #H = torch.tanh(self.dense(HH))
+        #return H
+	return fw_w_h
 
     def indp(self, config, H):
         scores = self.indp_affine(H)
-        log_probs = nn.LogSoftmax(2)(scores)
+        log_probs = F.log_softmax(scores, dim=2)
         return log_probs
 
     def forward(self, inputs):
         (config, data_in) = inputs
         self.map_to_variables(config, data_in)
         H = self.encoder(config)
-        if config.model_type=='INDP':
-            log_probs = self.indp(config, H)
+        #if config.model_type=='INDP':
+	log_probs = self.indp(config, H)
         return log_probs
 
     def ML_loss(self, log_probs):
-        objective = torch.sum(self.Gpreds * log_probs, dim=2) * self.w_mask
+	objective = torch.sum(self.Gpreds * log_probs, dim=2) * self.w_mask
         loss = -torch.mean(torch.mean(objective, dim=1), dim=0)
         return loss
