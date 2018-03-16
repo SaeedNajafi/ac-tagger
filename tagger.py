@@ -13,7 +13,7 @@ import torch.optim as optim
 def run_epoch(config, model, optimizer):
     # We're interested in keeping track of the loss during training
     total_loss = []
-    total_steps = int(np.ceil(config.data['train']['w_in_d'].shape[0] / float(config.batch_size)))
+    total_steps = int(np.ceil(len(config.data['train']['w_d']) / float(config.batch_size)))
     for step, data_dic in enumerate(data_iterator(config, 'train', True, total_steps)):
         data_dic['p_b'] = config.dropout
         optimizer.zero_grad()
@@ -23,7 +23,7 @@ def run_epoch(config, model, optimizer):
         loss.backward()
         torch.nn.utils.clip_grad_norm(model.parameters(), config.max_gradient_norm)
         optimizer.step()
-        total_loss.append(loss)
+        total_loss.append(loss.data.numpy())
         ##
         sys.stdout.write('\r{} / {} : loss = {}'.format(
                                                         step,
@@ -43,7 +43,7 @@ def predict(config, model):
     elif config.mode=='test':
         local_mode = 'test'
 
-    total_steps = int(np.ceil(config.data[local_mode]['w_in_d'].shape[0] / float(config.batch_size)))
+    total_steps = int(np.ceil(len(config.data['train']['w_d']) / float(config.batch_size)))
     for step, data_dic in enumerate(data_iterator(config, local_mode, False, total_steps)):
         data_dic['p_b'] = 1.0
         log_probs = model((config, data_dic))
@@ -101,7 +101,7 @@ def run_model(mode, path, in_file, o_file):
     torch.manual_seed(config.seed)
     torch.cuda.manual_seed_all(config.seed)
     model = Model(config)
-    optimizer = optim.Adam(model.parameters(), lr=config.learn_rate)
+    optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
     if mode=='train':
         best_val_cost = float('inf')
         best_val_epoch = 0

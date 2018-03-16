@@ -13,17 +13,14 @@ def load_data(config):
     word_vectors, words = load_embeddings(config.w_dic, config.w_vector)
     words.append(config.unk)
     words.append(config.dig)
-    word.append(config.pad)
     ep = np.sqrt(np.divide(3.0, word_vectors.shape[1]))
     unk_vec = np.random.uniform(low=-ep, high=ep, size=(1, word_vectors.shape[1]))
     dig_vec = np.random.uniform(low=-ep, high=ep, size=(1, word_vectors.shape[1]))
-    pad_vec = np.zeros(1, word_vectors.shape[1])
     word_vectors = np.append(word_vectors, unk_vec, axis=0)
     word_vectors = np.append(word_vectors, dig_vec, axis=0)
-    word_vectors = np.append(word_vectors, pad_vec, axis=0)
     config.w_em_size = word_vectors.shape[1]
     config.data['word_vectors'] = word_vectors
-
+    config.w_size = len(words)
     id_w = dict(enumerate(words))
     w_id = {v:k for k,v in id_w.iteritems()}
     config.data['id_w'] = id_w
@@ -31,13 +28,15 @@ def load_data(config):
 
     #Loads the starter chars
     print "INFO: Loading characters!"
-    _, chars = load_embeddings(config.ch_dic, None)
+    chars = []
+    for w in words:
+        for ch in list(w):
+            if ch not in chars:
+                chars.append(ch)
 
-    chars.append(config.pad)
     config.ch_size = len(chars)
     ep = np.sqrt(np.divide(3.0, config.ch_em_size))
     char_vectors = np.random.uniform(low=-ep, high=ep, size=(config.ch_size, config.ch_em_size))
-    char_vectors[config.ch_size-1] = np.zeros(1, config.ch_em_size)
     config.data['char_vectors'] = char_vectors
     id_ch = dict(enumerate(chars))
     ch_id = {v:k for k,v in id_ch.iteritems()}
@@ -53,8 +52,7 @@ def load_data(config):
             if len(tag)!=0:
                 tags.append(tag)
     tags.append(config.rare)
-    tags.append(config.pad)
-
+    tags.append(config.end)
     id_tag = dict(enumerate(tags))
     tag_id = {v:k for k,v in id_tag.iteritems()}
     config.tag_size = len(tags)
@@ -79,7 +77,6 @@ def load_data(config):
 
         config.data['train'] = None
         config.data['dev'] = None
-
     return
 def load_embeddings(vocabfile, vectorfile=None):
     em = None
@@ -88,6 +85,7 @@ def load_embeddings(vocabfile, vectorfile=None):
     with open(vocabfile) as fd:
         tokens = [line.strip() for line in fd]
     return em, tokens
+    
 def load_dataset(config, local_mode):
     if local_mode == 'train':
         f_raw = config.train_raw
@@ -134,28 +132,28 @@ def load_dataset(config, local_mode):
             # flush running buffer
             if len(cur)!=0: labels.append(cur)
 
+    w_d = []
+    w_cap_d = []
+    s_len_d = []
+    w_ch = {}
 
-    Word_X = []
-    Cap_X = []
-    Char_X = []
-
-    word_x = []
-    cap_x = []
-    char_x = []
+    word_arr = []
+    cap_arr = []
     for i in range(len(sentences)):
         for j in range(len(sentences[i])):
             word = sentences[i][j]
-            word_x.append(canonicalize_word(config, word))
-            cap_x.append(capalize_word(word))
-            char_x.append(canonicalize_char(config, word))
+            word_arr.append(canonicalize_word(config, word))
+            cap_arr.append(capalize_word(word))
+            if word not in w_ch:
+                w_ch[canonicalize_word(config, word)] = canonicalize_char(config, word)
 
-        Word_X.append(word_x)
-        Cap_X.append(cap_x)
-        Char_X.append(char_x)
+        w_d.append(word_arr)
+        w_cap_d.append(cap_arr)
+        s_len_d.append(len(sentences[i]))
+
         #reset
-        word_x = []
-        cap_x = []
-        char_x = []
+        word_arr = []
+        cap_arr = []
 
     Y = []
     if local_mode != 'test':
@@ -168,11 +166,20 @@ def load_dataset(config, local_mode):
             #reset
             y = []
 
+    data = {
+            'w_ch': w_ch,
+            'w_d': w_d,
+            'w_cap_d': w_cap_d,
+            's_len_d': s_len_d
+            }
 
-    if len(Y)==0:
-        return padding(config, local_mode, Char_X, Cap_X, Word_X)
+    if len(Y)!=0:
+        data['tag_d'] = Y
+    else:
+        data['tag_d'] = None
 
-    return padding(config, local_mode, Char_X, Cap_X, Word_X, Y)
+    config.data[local_mode] = data
+    return
 #https://github.com/glample/tagger/blob/master/utils.py
 def iobes_iob(tags):
     """
@@ -280,104 +287,28 @@ def canonicalize_char(config, word):
 		if ch in config.data['ch_id']:
 			lst.append(config.data['ch_id'][ch])
 
-	return
+	return lst
+def pad(config, out_dic):
+    config.max_s_len = max(out_dic['s_len_b'])
+    config.max_w_len = max(out_dic['w_len_b'])
+    for each in out_dic['w_b']:
+        pad_lst = [0] * (config.max_s_len-len(each))
+        each.extend(pad_lst)
 
+    for each in out_dic['w_cap_b']:
+        pad_lst = [0] * (config.max_s_len-len(each))
+        each.extend(pad_lst)
 
-    lst
-def padding(config, local_mode, char_data, cap_data, word_data, tag_data=None):
+    for each in out_dic['ch_b']:
+        pad_lst = [0] * (config.max_w_len-len(each))
+        each.extend(pad_lst)
 
-    word_X = []
-    cap_X = []
-    mask_X = []
-    char_X = []
-    rev_char_X = []
-    word_length_X = []
-    sentence_length_X = []
-    Y = []
-    for index in range(len(word_data)):
-        sentence = word_data[index]
-        if local_mode!='test': tags = tag_data[index]
-        caps = cap_data[index]
-        sentence_length_X.append(len(sentence))
-        j = len(sentence)
-        mask_list = [1.0] * j
-        if j < config.max_s_len:
-            while j < config.max_s_len:
-                sentence.append(config.data['w_id'][config.pad])
-                if local_mode!='test': tags.append(config.data['tag_id'][config.pad])
-                caps.append(0)
-                mask_list.append(0.0)
-                j += 1
-        else:
-            sentence = sentence[0:config.max_s_len]
-            if local_mode!='test': tags = tags[0:config.max_s_len]
-            caps = caps[0:config.max_s_len]
-            mask_list = mask_list[0:config.max_s_len]
-
-        cap_X.append(caps)
-        word_X.append(sentence)
-        mask_X.append(mask_list)
-        if local_mode!='test': Y.append(tags)
-
-    for index in range(len(char_data)):
-        sentence = char_data[index]
-        pad_list = [config.data['ch_id'][config.pad]] * config.max_w_len
-        length = []
-        new_sentence = []
-        rev_new_sentence = []
-        for k in range(len(sentence)):
-            word = sentence[k]
-            rev_word = list(reversed(word))
-            length.append(len(word))
-            j = len(word)
-            if j < config.max_w_len:
-                while j < config.max_w_len:
-                    word.append(config.data['ch_id'][config.pad])
-                    rev_word.append(config.data['ch_id'][config.pad])
-                    j += 1
-            else:
-                word = word[0:config.max_w_len]
-                rev_word = list(reversed(word))
-
-
-            new_sentence.append(word)
-            rev_new_sentence.append(rev_word)
-
-        j = len(new_sentence)
-        if j < config.max_s_len:
-            while j < config.max_s_len:
-                new_sentence.append(pad_list)
-                rev_new_sentence.append(pad_list)
-                length.append(0)
-                j += 1
-        else:
-            new_sentence = new_sentence[0:config.max_s_len]
-            rev_new_sentence = rev_new_sentence[0:config.max_s_len]
-            length = length[0:config.max_s_len]
-
-        word_length_X.append(length)
-        char_X.append(new_sentence)
-        rev_char_X.append(rev_new_sentence)
-
-    data = {
-            'ch_in_d': np.array(char_X),
-            'rev_ch_in_d': np.array(rev_char_X),
-            'w_len_d': np.array(word_length_X),
-            'w_cap_d': np.array(cap_X),
-            'w_in_d': np.array(word_X),
-            'w_mask_d': np.array(mask_X),
-            's_len_d': np.array(sentence_length_X)
-            }
-
-    if tag_data is not None:
-        data['tag_d'] = np.array(Y)
-    else:
-        data['tag_d'] = None
-
-    config.data[local_mode] = data
+    if out_dic['tag_b'] is not None:
+        for each in out_dic['tag_b']:
+            pad_lst = [config.data['tag_id'][config.end]] * (config.max_s_len-len(each))
+            each.extend(pad_lst)
     return
 def data_iterator(config, local_mode, shuffle, total_steps):
-
     #static batch size
     sb_size = config.batch_size
     if shuffle:
@@ -387,19 +318,41 @@ def data_iterator(config, local_mode, shuffle, total_steps):
 
     out_dic = {}
     for step in steps:
-        # Create the batch by selecting up to batch_size elements
+        #Create the batch by selecting up to batch_size elements
         bs = step * sb_size
-        out_dic['ch_in_b'] = config.data[local_mode]['ch_in_d'][bs:bs + sb_size][:][:]
-        out_dic['rev_ch_in_b'] = config.data[local_mode]['rev_ch_in_d'][bs:bs + sb_size][:][:]
-        out_dic['w_len_b'] = config.data[local_mode]['w_len_d'][bs:bs + sb_size][:]
+        out_dic['w_b'] = config.data[local_mode]['w_d'][bs:bs + sb_size][:]
         out_dic['w_cap_b'] = config.data[local_mode]['w_cap_d'][bs:bs + sb_size][:]
-        out_dic['w_in_b'] = config.data[local_mode]['w_in_d'][bs:bs + sb_size][:]
-        out_dic['w_mask_b'] = config.data[local_mode]['w_mask_d'][bs:bs + sb_size][:]
         out_dic['s_len_b'] = config.data[local_mode]['s_len_d'][bs:bs + sb_size]
+
+        dic = {}
+        for each in out_dic['w_b']:
+            for inner_each in each:
+                dic[inner_each] = config.data[local_mode]['w_ch'][inner_each]
+
+        #for padding
+        if 0 not in dic:
+            dic[0] = config.data[local_mode]['w_ch'][0]
+
+        ch_b = []
+        ch_lst_b = []
+        w_len_b = []
+        for each in sorted(dic):
+            ch_b.append(dic[each])
+            ch_lst_b.append(each)
+            w_len_b.append(len(dic[each]))
+
+
+        out_dic['ch_b'] = ch_b
+        index_id = dict(enumerate(ch_lst_b))
+        id_index = {v:k for k,v in index_id.iteritems()}
+        out_dic['w_id_index'] = id_index
+        out_dic['w_len_b'] = w_len_b
 
         if local_mode!='test':
             out_dic['tag_b'] = config.data[local_mode]['tag_d'][bs:bs + sb_size][:]
         else:
             out_dic['tag_b'] = None
+
+        pad(config, out_dic)
         ###
         yield out_dic
