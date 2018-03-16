@@ -24,14 +24,25 @@ class Model(nn.Module):
 
         #size of final input feature vectors. 16 is the size of Capitalization vectors.
         #in_size = config.w_em_size + 2 * config.ch_rnn_units + 16
-        self.w_rnn = nn.LSTM(
+        #self.w_rnn = nn.LSTM(
                             #input_size=in_size,
-			    input_size=config.w_em_size,
+        #                    input_size=config.w_em_size,
+        #                    hidden_size=config.w_rnn_units,
+        #                    num_layers=1,
+        #                    bias=True,
+        #                    batch_first=True,
+        #bidirectional=True
+        #                    )
+        self.fw_w_rnn = nn.LSTMCell(
+                            input_size=config.w_em_size,
                             hidden_size=config.w_rnn_units,
-                            num_layers=1,
-                            bias=True,
-                            batch_first=True,
-                            bidirectional=True
+                            bias=True
+                            )
+
+        self.bw_w_rnn = nn.LSTMCell(
+                            input_size=config.w_em_size,
+                            hidden_size=config.w_rnn_units,
+                            bias=True
                             )
 
         self.dense = nn.Linear(
@@ -39,6 +50,7 @@ class Model(nn.Module):
                             config.w_rnn_units,
                             bias=True
                             )
+
         self.indp_affine = nn.Linear(
                             config.w_rnn_units,
                             config.tag_size,
@@ -54,6 +66,7 @@ class Model(nn.Module):
                 init.constant(param, 0.0)
             if 'weight' in name:
                 init.xavier_uniform(param)
+
         #for name, param in self.fw_ch_rnn.named_parameters():
         #    if 'weight' in name:
         #        init.orthogonal(param)
@@ -62,11 +75,18 @@ class Model(nn.Module):
         #    if 'weight' in name:
         #        init.orthogonal(param)
 
-        for name, param in self.w_rnn.named_parameters():
+        for name, param in self.fw_w_rnn.named_parameters():
             if 'weight' in name:
                 init.orthogonal(param)
+
+        for name, param in self.bw_w_rnn.named_parameters():
+            if 'weight' in name:
+                init.orthogonal(param)
+
         return
+
     def embeddings(self, config):
+
         """Add embedding layer that maps from vocabulary to vectors."""
         #we have 4 kinds of Capitalization patterns
         #self.cap_em = nn.Embedding(4, 16)
@@ -82,6 +102,7 @@ class Model(nn.Module):
         #self.ch_em.weight.data.copy_(ch_lt)
         #self.ch_em.weight.requires_grad = True
         return
+
     def map_to_variables(self, config, data_in):
         ch = torch.LongTensor(data_in['ch_b']) #(None, config.max_w_len)
         w_len = torch.LongTensor(data_in['w_len_b']) #(None,)
@@ -124,6 +145,7 @@ class Model(nn.Module):
             self.w_idx = Variable(w_idx.cuda())
             self.w_cap = Variable(w_cap.cuda())
             self.w_mask = Variable(w_mask.cuda())
+
             if data_in['tag_b'] is not None:
                 self.tag = Variable(tag.cuda())
         else:
@@ -147,8 +169,9 @@ class Model(nn.Module):
             else:
                 self.Gpreds = Variable(torch.FloatTensor(Gpreds))
         return
+
     def features(self, config):
-	'''
+        '''
         #bi-directional rnn to build prefix/suffix patterns.
         ch = self.ch_em(self.ch).view(config.max_w_len, -1, config.ch_em_size)
         fhx = Variable(torch.zeros(ch.size()[1], ch.size()[2]).cuda())
@@ -183,22 +206,43 @@ class Model(nn.Module):
         C = self.cap_em(self.w_cap)
         p_w_s_c = torch.cat((P, W, S, C), 2)
         final_features = nn.Dropout(self.p)(p_w_s_c)
-	'''
-	final_features = self.w_em(self.w)
+        '''
+        final_features = self.w_em(self.w)
         return final_features
+
     def encoder(self, config):
-        features = self.features(config)
-        h_out, _ = self.w_rnn(features)
+        features = self.features(config).view(config.max_s_len, -1, config.w_em_size)
+        w_fhx = Variable(torch.zeros(features.size()[1], features.size()[2]).cuda())
+        w_fcx = Variable(torch.zeros(features.size()[1], features.size()[2]).cuda())
+        outputs = []
+        for i in range(config.max_s_len):
+            w_fhx, w_fcx = self.fw_w_rnn(features[i], (w_fhx, w_fcx))
+            outputs.append(w_fhx)
+
+        fw_w_h = torch.stack(outputs, dim=1)
+
+        w_bhx = Variable(torch.zeros(features.size()[1], features.size()[2]).cuda())
+        w_bcx = Variable(torch.zeros(features.size()[1], features.size()[2]).cuda())
+        outputs = []
+        for i in reversed(range(config.max_s_len)):
+            w_bhx, w_bcx = self.bw_w_rnn(features[i], (w_bhx, w_bcx))
+            outputs.append(w_bhx)
+
+        bw_w_h = torch.stack(outputs, dim=1)
+
+        h_out = torch.cat((fw_w_h, bw_w_h), 2)
         h_out_dr = nn.Dropout(self.p)(h_out)
         #mask = self.w_mask.view(-1, config.max_s_len, 1).expand(-1, config.max_s_len, 2 * config.w_rnn_units)
         #HH = h_out_dr * mask
-	HH = h_out_dr
-        H = nn.Tanh()(self.dense(HH))
+        HH = h_out_dr
+        H = torch.tanh(self.dense(HH))
         return H
+
     def indp(self, config, H):
         scores = self.indp_affine(H)
         log_probs = nn.LogSoftmax(2)(scores)
         return log_probs
+
     def forward(self, inputs):
         (config, data_in) = inputs
         self.map_to_variables(config, data_in)
@@ -206,6 +250,7 @@ class Model(nn.Module):
         if config.model_type=='INDP':
             log_probs = self.indp(config, H)
         return log_probs
+
     def ML_loss(self, log_probs):
         objective = torch.sum(self.Gpreds * log_probs, dim=2) * self.w_mask
         loss = -torch.mean(torch.mean(objective, dim=1), dim=0)

@@ -17,7 +17,6 @@ def run_epoch(config, model, optimizer):
     for step, data_dic in enumerate(data_iterator(config, 'train', True, total_steps)):
         data_dic['p_b'] = config.dropout
         optimizer.zero_grad()
-	model.zero_grad()
         log_probs = model((config, data_dic))
         if config.model_type=='INDP':
             loss = model.ML_loss(log_probs)
@@ -34,6 +33,7 @@ def run_epoch(config, model, optimizer):
                         )
         sys.stdout.flush()
     return np.mean(total_loss)
+
 def predict(config, model):
 
     """Make predictions from the provided model."""
@@ -52,6 +52,7 @@ def predict(config, model):
              preds = np.argmax(log_probs.cpu().data.numpy(), axis=2)
              outputs.append(preds)
     return outputs
+
 def save_predictions(config, predictions, filename, local_mode):
     """Saves predictions to the provided file."""
     with open(filename, "w") as f:
@@ -59,16 +60,15 @@ def save_predictions(config, predictions, filename, local_mode):
             batch_predictions = predictions[batch_index]
             b_size = len(batch_predictions)
             for sentence_index in range(b_size):
-		ad = (batch_index * config.batch_size) + sentence_index
-		word_index = 0
-		while(word_index < config.data[local_mode]['s_len_d'][ad]):
-			x = config.data[local_mode]['w_d'][ad][word_index]
-			str_x = config.data['id_w'][x]
-			pred = batch_predictions[sentence_index][word_index]
-			str_pred = config.data['id_tag'][pred]
-			f.write(str_x + '\t' + str_pred + '\n')
-			word_index += 1
-
+                ad = (batch_index * config.batch_size) + sentence_index
+                word_index = 0
+                while(word_index < config.data[local_mode]['s_len_d'][ad]):
+                    x = config.data[local_mode]['w_d'][ad][word_index]
+                    str_x = config.data['id_w'][x]
+                    pred = batch_predictions[sentence_index][word_index]
+                    str_pred = config.data['id_tag'][pred]
+                    f.write(str_x + '\t' + str_pred + '\n')
+                    word_index += 1
                 f.write("\n")
 
 def eval_on_dev(config, filename):
@@ -95,6 +95,7 @@ def eval_on_dev(config, filename):
                     break
 
     return float(correct/total) * 100
+
 def run_model(mode, path, in_file, o_file):
     config = Configuration()
     config.mode = mode
