@@ -43,7 +43,7 @@ def predict(config, model):
     elif config.mode=='test':
         local_mode = 'test'
 
-    total_steps = int(np.ceil(len(config.data['train']['w_d']) / float(config.batch_size)))
+    total_steps = int(np.ceil(len(config.data[local_mode]['w_d']) / float(config.batch_size)))
     for step, data_dic in enumerate(data_iterator(config, local_mode, False, total_steps)):
         data_dic['p_b'] = 1.0
         log_probs = model((config, data_dic))
@@ -99,8 +99,11 @@ def run_model(mode, path, in_file, o_file):
     load_data(config)
     np.random.seed(config.seed)
     torch.manual_seed(config.seed)
-    torch.cuda.manual_seed_all(config.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(config.seed)
     model = Model(config)
+    if torch.cuda.is_available():
+        model.cuda()
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
     if mode=='train':
         best_val_cost = float('inf')
