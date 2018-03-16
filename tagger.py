@@ -23,7 +23,7 @@ def run_epoch(config, model, optimizer):
         loss.backward()
         torch.nn.utils.clip_grad_norm(model.parameters(), config.max_gradient_norm)
         optimizer.step()
-        total_loss.append(loss.data.numpy())
+        total_loss.append(loss.cpu().data.numpy())
         ##
         sys.stdout.write('\r{} / {} : loss = {}'.format(
                                                         step,
@@ -48,7 +48,7 @@ def predict(config, model):
         data_dic['p_b'] = 1.0
         log_probs = model((config, data_dic))
         if config.model_type=='INDP':
-             preds = np.argmax(log_probs.data.numpy(), axis=2)
+             preds = np.argmax(log_probs.cpu().data.numpy(), axis=2)
              outputs.append(preds)
     return outputs
 def save_predictions(config, predictions, filename, local_mode):
@@ -61,7 +61,7 @@ def save_predictions(config, predictions, filename, local_mode):
                 for word_index in range(config.max_s_len):
                     ad = (batch_index * config.batch_size) + sentence_index
                     if(word_index < config.data[local_mode]['s_len_d'][ad]):
-                        x = config.data[local_mode]['w_in_d'][ad][word_index]
+                        x = config.data[local_mode]['w_d'][ad][word_index]
                         str_x = config.data['id_w'][x]
                         pred = batch_predictions[sentence_index][word_index]
                         str_pred = config.data['id_tag'][pred]

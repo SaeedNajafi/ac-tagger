@@ -151,8 +151,8 @@ class Model(nn.Module):
     def features(self, config):
         #bi-directional rnn to build prefix/suffix patterns.
         ch = self.ch_em(self.ch).view(config.max_w_len, -1, config.ch_em_size)
-        fhx = Variable(torch.zeros(ch.size()[1], ch.size()[2]))
-        fcx = Variable(torch.zeros(ch.size()[1], ch.size()[2]))
+        fhx = Variable(torch.zeros(ch.size()[1], ch.size()[2]).cuda())
+        fcx = Variable(torch.zeros(ch.size()[1], ch.size()[2]).cuda())
         outputs = []
         for i in range(config.max_w_len):
             fhx, fcx = self.fw_ch_rnn(ch[i], (fhx, fcx))
@@ -166,8 +166,8 @@ class Model(nn.Module):
 
 
         rev_ch = self.ch_em(self.rev_ch).view(config.max_w_len, -1, config.ch_em_size)
-        bhx = Variable(torch.zeros(rev_ch.size()[1], rev_ch.size()[2]))
-        bcx = Variable(torch.zeros(rev_ch.size()[1], rev_ch.size()[2]))
+        bhx = Variable(torch.zeros(rev_ch.size()[1], rev_ch.size()[2]).cuda())
+        bcx = Variable(torch.zeros(rev_ch.size()[1], rev_ch.size()[2]).cuda())
         outputs = []
         for i in range(config.max_w_len):
             bhx, bcx = self.bw_ch_rnn(rev_ch[i], (bhx, bcx))

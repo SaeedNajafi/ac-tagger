@@ -16,7 +16,7 @@ class Configuration(object):
     end = 'eennddnnee'
 
     """Model hyperparams and data information"""
-    w_rnn_units = 128
+    w_rnn_units = 512
     ch_rnn_units = 32
     ch_em_size = 32
     tag_em_size = 128
