@@ -23,7 +23,7 @@ class Configuration(object):
     dec_rnn_units = 512
     batch_size = 32
     dropout = 0.5
-    learning_rate = 0.0005
+    learning_rate = 0.005
     max_gradient_norm = 5.
     max_epochs = 128
     early_stopping = 5
