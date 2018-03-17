@@ -1,32 +1,45 @@
 import itertools
 import re
 import numpy as np
+from random import shuffle
 
-def load_data(config):
-    """ Loads starter word vectors, and train/dev/test data. """
+def load_embeddings(cfg):
+    #This is where we will keep embeddings data.
+    cfg.data = {}
 
-    #This is where we keep all data
-    config.data = {}
+    #Defining some constants. Change this part if you want.
+    cfg.unk = 'uunnkknnuu'
+    cfg.dig = 'ddiiggiidd'
+    cfg.time = 'ttiimmeemmiitt'
+    cfg.date = 'ddaatteettaadd'
 
-    #Loads the starter word vectors
+    #Loads the starter word vectors.
     print "INFO: Loading word embeddings!"
-    word_vectors, words = load_embeddings(config.w_dic, config.w_vector)
-    words.append(config.unk)
-    words.append(config.dig)
-    ep = np.sqrt(np.divide(3.0, word_vectors.shape[1]))
-    unk_vec = np.random.uniform(low=-ep, high=ep, size=(1, word_vectors.shape[1]))
-    dig_vec = np.random.uniform(low=-ep, high=ep, size=(1, word_vectors.shape[1]))
-    word_vectors = np.append(word_vectors, unk_vec, axis=0)
-    word_vectors = np.append(word_vectors, dig_vec, axis=0)
-    config.w_em_size = word_vectors.shape[1]
-    config.data['word_vectors'] = word_vectors
-    config.w_size = len(words)
+    word_vectors = np.loadtxt(cfg.w_vector, dtype=np.float32)
+    with open(cfg.w_dic) as fd:
+        words = [line.strip() for line in fd]
+
+    #Adding constants to words and word_vectors.
+    words.extend([cfg.unk, cfg.dig, cfg.time, cfg.date])
+
+    cfg.w_size = len(words)
+    cfg.w_em_size = word_vectors.shape[1]
+
+    #Use xavier-uniform distribution to initialize vectors for constants.
+    ep = np.sqrt(np.divide(6.0, cfg.w_em_size))
+    temp_vec = np.random.uniform(low=-ep, high=ep, size=(4, cfg.w_em_size))
+    word_vectors = np.append(word_vectors, temp_vec, axis=0)
+
+    #Map each word to id, and vice versa.
     id_w = dict(enumerate(words))
     w_id = {v:k for k,v in id_w.iteritems()}
-    config.data['id_w'] = id_w
-    config.data['w_id'] = w_id
 
-    #Loads the starter chars
+    #Save word_vectors and mapping dictionaries.
+    cfg.data['w_v'] = word_vectors
+    cfg.data['id_w'] = id_w
+    cfg.data['w_id'] = w_id
+
+    #Finds chars from words.
     print "INFO: Loading characters!"
     chars = []
     for w in words:
@@ -34,152 +47,42 @@ def load_data(config):
             if ch not in chars:
                 chars.append(ch)
 
-    config.ch_size = len(chars)
-    ep = np.sqrt(np.divide(3.0, config.ch_em_size))
-    char_vectors = np.random.uniform(low=-ep, high=ep, size=(config.ch_size, config.ch_em_size))
-    config.data['char_vectors'] = char_vectors
+    cfg.ch_size = len(chars)
+    ep = np.sqrt(np.divide(6.0, cfg.ch_em_size))
+    char_vectors = np.random.uniform(
+                                    low=-ep,
+                                    high=ep,
+                                    size=(cfg.ch_size, cfg.ch_em_size)
+                                    )
     id_ch = dict(enumerate(chars))
     ch_id = {v:k for k,v in id_ch.iteritems()}
-    config.data['id_ch'] = id_ch
-    config.data['ch_id'] = ch_id
+    cfg.data['ch_v'] = char_vectors
+    cfg.data['id_ch'] = id_ch
+    cfg.data['ch_id'] = ch_id
 
     #Loads the tags
     print "INFO: Loading tags!"
     tags = []
-    with open(config.tag_dic, 'r') as fd:
+    with open(cfg.tag_dic, 'r') as fd:
         for line in fd.readlines():
             tag = line.strip()
-            if len(tag)!=0:
+            if len(tag)!=0: #for empty line!
                 tags.append(tag)
-    tags.append(config.rare)
-    tags.append(config.end)
+
+    cfg.rare = 'rraarreerraarr' #for rare tags
+    tags.append(cfg.rare)
+    cfg.tag_size = len(tags)
     id_tag = dict(enumerate(tags))
     tag_id = {v:k for k,v in id_tag.iteritems()}
-    config.tag_size = len(tags)
-    config.data['id_tag'] = id_tag
-    config.data['tag_id'] = tag_id
+    cfg.data['id_tag'] = id_tag
+    cfg.data['tag_id'] = tag_id
 
-    if config.mode == 'train':
-        #Loads the training set
-        print "INFO: Loading training data!"
-        load_dataset(config, 'train')
-
-        #Loads the dev set (for tuning hyperparameters)
-        print "INFO: Loading dev data!"
-        load_dataset(config, 'dev')
-
-        config.data['test'] = None
-
-    elif config.mode == 'test':
-        #Loads the test set
-        print "INFO: Loading test data!"
-        load_dataset(config, 'test')
-
-        config.data['train'] = None
-        config.data['dev'] = None
+    #This is an automatically generated pad id.
+    #Everything (word, char or tag) with this id will get a zero vector.
+    cfg.pad_id = len(chars) + len(words) + len(tags)
     return
-def load_embeddings(vocabfile, vectorfile=None):
-    em = None
-    if(vectorfile is not None):
-        em = np.loadtxt(vectorfile, dtype=np.float32)
-    with open(vocabfile) as fd:
-        tokens = [line.strip() for line in fd]
-    return em, tokens
-    
-def load_dataset(config, local_mode):
-    if local_mode == 'train':
-        f_raw = config.train_raw
-        f_ref = config.train_ref
 
-    elif local_mode == 'dev':
-        f_raw = config.dev_raw
-        f_ref = config.dev_ref
-
-    elif local_mode == 'test':
-        f_raw = config.test_raw
-        f_ref = None
-
-    sentences = []
-    with open(f_raw, 'r') as fd:
-        cur = []
-        for line in fd:
-            line = line.strip()
-            #new sentence on blank line
-            if (len(line) == 0):
-                if len(cur) > 0:
-                    sentences.append(cur)
-                cur = []
-            else: # read in tokens
-                cur.append(line)
-
-        # flush running buffer
-        if len(cur)!=0: sentences.append(cur)
-
-    if local_mode != 'test':
-        labels = []
-        with open(f_ref, 'r') as fd:
-            cur = []
-            for line in fd:
-                line = line.strip()
-                #new sentence on blank line
-                if (len(line) == 0):
-                    if len(cur) > 0:
-                        labels.append(cur)
-                    cur = []
-                else: # read in tokens
-                    cur.append(line)
-
-            # flush running buffer
-            if len(cur)!=0: labels.append(cur)
-
-    w_d = []
-    w_cap_d = []
-    s_len_d = []
-    w_ch = {}
-
-    word_arr = []
-    cap_arr = []
-    for i in range(len(sentences)):
-        for j in range(len(sentences[i])):
-            word = sentences[i][j]
-            word_arr.append(canonicalize_word(config, word))
-            cap_arr.append(capalize_word(word))
-            if word not in w_ch:
-                w_ch[canonicalize_word(config, word)] = canonicalize_char(config, word)
-
-        w_d.append(word_arr)
-        w_cap_d.append(cap_arr)
-        s_len_d.append(len(sentences[i]))
-
-        #reset
-        word_arr = []
-        cap_arr = []
-
-    Y = []
-    if local_mode != 'test':
-        y = []
-        for i in range(len(labels)):
-            for j in range(len(labels[i])):
-                tag = labels[i][j]
-                y.append(canonicalize_tag(config, tag))
-            Y.append(y)
-            #reset
-            y = []
-
-    data = {
-            'w_ch': w_ch,
-            'w_d': w_d,
-            'w_cap_d': w_cap_d,
-            's_len_d': s_len_d
-            }
-
-    if len(Y)!=0:
-        data['tag_d'] = Y
-    else:
-        data['tag_d'] = None
-
-    config.data[local_mode] = data
-    return
+#Utility for NER
 #https://github.com/glample/tagger/blob/master/utils.py
 def iobes_iob(tags):
     """
@@ -200,6 +103,8 @@ def iobes_iob(tags):
         else:
             raise Exception('Invalid format!')
     return new_tags
+
+#Utility for NER
 #https://github.com/glample/tagger/blob/master/utils.py
 def iob_iobes(tags):
     """
@@ -224,6 +129,8 @@ def iob_iobes(tags):
         else:
             raise Exception('Invalid IOB format!')
     return new_tags
+
+#Utility for NER
 #https://github.com/glample/tagger/blob/master/utils.py
 def iob2(tags):
     """
@@ -245,6 +152,8 @@ def iob2(tags):
         else:  # conversion IOB1 to IOB2
             tags[i] = 'B' + tag[1:]
     return True
+
+#Utility for NER
 #https://github.com/glample/tagger/blob/master/loader.py
 def capalize_word(word):
     """
@@ -255,7 +164,7 @@ def capalize_word(word):
         3 = one capital (not first letter) without digits
     """
     if word.lower() == word:
-	return 0
+        return 0
 
     elif word.upper() == word:
         return 1
@@ -265,94 +174,229 @@ def capalize_word(word):
 
     else:
     	return 3
-def canonicalize_word(config, word):
+
+def process_word(cfg, word):
+    w_id = cfg.data['w_id']
     word = word.lower()
-    if word in config.data['w_id']:
-        return config.data['w_id'][word]
+    if word in w_id:
+        return w_id[word]
+
+    #Change this part for more rules to detect dates.
+    elif re.search(r'\d{4}-\d{2}-\d{2}', word):
+        return w_id[cfg.date]
+
+    #Change this part for more rules to detect times.
+    elif re.search(r'\d+:\d+:[\d.]+', word):
+        return w_id[cfg.time]
+
+    #Detecting other digits.
     elif re.search(r'\d', word):
-        return config.data['w_id'][config.dig]
-    else:
-        return config.data['w_id'][config.unk]
-def canonicalize_tag(config, tag):
-    if tag in config.data['tag_id']:
-        return config.data['tag_id'][tag]
-    else:
-        print "INFO: could not find this tag: ", tag
-        print "INFO: replaced it with rare tag!"
-        return config.data['tag_id'][config.rare]
-def canonicalize_char(config, word):
-	word = word.lower()
-	lst = []
-	for ch in list(word):
-		if ch in config.data['ch_id']:
-			lst.append(config.data['ch_id'][ch])
+        return w_id[cfg.dig]
 
-	return lst
-def pad(config, out_dic):
-    config.max_s_len = max(out_dic['s_len_b'])
-    config.max_w_len = max(out_dic['w_len_b'])
-    for each in out_dic['w_b']:
-        pad_lst = [0] * (config.max_s_len-len(each))
-        each.extend(pad_lst)
+    return w_id[cfg.unk]
 
-    for each in out_dic['w_cap_b']:
-        pad_lst = [0] * (config.max_s_len-len(each))
-        each.extend(pad_lst)
+def process_tag(cfg, tag):
+    tag_id = cfg.data['tag_id']
+    if tag in tag_id:
+        return tag_id[tag]
 
-    for each in out_dic['ch_b']:
-        pad_lst = [0] * (config.max_w_len-len(each))
-        each.extend(pad_lst)
+    print "INFO: Could not find the following tag and replaced it with 'rare': ", tag
+    return tag_id[cfg.rare]
 
-    if out_dic['tag_b'] is not None:
-        for each in out_dic['tag_b']:
-            pad_lst = [config.data['tag_id'][config.end]] * (config.max_s_len-len(each))
-            each.extend(pad_lst)
-    return
-def data_iterator(config, local_mode, shuffle, total_steps):
-    #static batch size
-    sb_size = config.batch_size
-    if shuffle:
-    	steps = np.random.permutation(total_steps).tolist()
-    else:
-    	steps = range(total_steps)
-
-    out_dic = {}
-    for step in steps:
-        #Create the batch by selecting up to batch_size elements
-        bs = step * sb_size
-        out_dic['w_b'] = config.data[local_mode]['w_d'][bs:bs + sb_size][:]
-        out_dic['w_cap_b'] = config.data[local_mode]['w_cap_d'][bs:bs + sb_size][:]
-        out_dic['s_len_b'] = config.data[local_mode]['s_len_d'][bs:bs + sb_size]
-
-        dic = {}
-        for each in out_dic['w_b']:
-            for inner_each in each:
-                dic[inner_each] = config.data[local_mode]['w_ch'][inner_each]
-
-        #for padding
-        if 0 not in dic:
-            dic[0] = config.data[local_mode]['w_ch'][0]
-
-        ch_b = []
-        ch_lst_b = []
-        w_len_b = []
-        for each in sorted(dic):
-            ch_b.append(dic[each])
-            ch_lst_b.append(each)
-            w_len_b.append(len(dic[each]))
-
-
-        out_dic['ch_b'] = ch_b
-        index_id = dict(enumerate(ch_lst_b))
-        id_index = {v:k for k,v in index_id.iteritems()}
-        out_dic['w_id_index'] = id_index
-        out_dic['w_len_b'] = w_len_b
-
-        if local_mode!='test':
-            out_dic['tag_b'] = config.data[local_mode]['tag_d'][bs:bs + sb_size][:]
+def process_chars(cfg, word):
+    ch_id = cfg.data['ch_id']
+    word = word.lower()
+    lst = []
+    for ch in list(word):
+        if ch in ch_id:
+            lst.append(ch_id[ch])
         else:
-            out_dic['tag_b'] = None
+            print "INFO: Could not find the following char and ignored it: ", ch
 
-        pad(config, out_dic)
-        ###
-        yield out_dic
+    return lst
+
+def load_data(cfg):
+    """ Loads train, dev or test data. """
+    #We assume that we cannot read the whole data into memory at once.
+    #We do not need the whole data, we read batches of the data.
+    #The training data will be shuffled. Pseudo shuffling inside the batch.
+    #The dev/test data is not shuffled.
+
+    #static batch size
+    sb_size = cfg.batch_size
+
+    #local_mode can have three values 'train', 'dev' and 'test'.
+    mode = cfg.local_mode
+
+    if mode == 'train':
+        f_raw = cfg.train_raw
+        f_ref = cfg.train_ref
+        hasY = True
+
+    elif mode == 'dev':
+        f_raw = cfg.dev_raw
+        f_ref = cfg.dev_ref
+        hasY = True
+
+    elif mode == 'test':
+        f_raw = cfg.test_raw
+        f_ref = None
+        hasY = False
+
+
+    batch = []
+    counter = 0
+    fd_raw = open(f_raw, 'r')
+    if hasY: fd_ref = open(f_ref, 'r')
+    x_buffer = []
+    y_buffer = []
+    for x_line in fd_raw:
+        x_line = x_line.strip()
+        #we assume ref and raw files have the same number of lines.
+        if hasY: y_line = fd_ref.readline().strip()
+
+        #new sentence on blank line
+        if (len(x_line) == 0):
+            if len(x_buffer) > 0:
+                batch.append((x_buffer, y_buffer))
+                counter += 1
+                if counter==sb_size:
+                    yield process_batch(cfg, batch)
+                    batch = []
+                    counter = 0
+            x_buffer = []
+            y_buffer = []
+
+        else: # read in tokens
+            x_buffer.append(x_line)
+            if hasY: y_buffer.append(y_line)
+
+    fd_raw.close()
+    if hasY: fd_ref.close()
+
+    #flush running buffer
+    if counter!=0 or len(x_buffer)!=0:
+        batch.append((x_buffer, y_buffer))
+        yield process_batch(cfg, batch)
+
+def process_batch(cfg, batch):
+    mode = cfg.local_mode
+
+    #Shuffle the batch only for the training data.
+    if mode=='train': shuffle(batch)
+
+    hasY = True
+    if mode=='test': hasY = False
+
+    Word_Ids = []
+    Cap_Ids = []
+    Word_to_Chars = {}
+    Tag_Ids = []
+    S_Lens = []
+
+    word_ids = []
+    cap_ids = []
+    tag_ids = []
+    for (X, Y) in batch:
+        #X is one sentence.
+        if len(X)==0 and len(Y)==0: continue
+
+        for x in X:
+            word = x
+            word_id = process_word(cfg, word)
+            word_ids.append(word_id)
+            if word_id not in Word_to_Chars:
+                Word_to_Chars[word_id] = process_chars(cfg, word)
+            cap_ids.append(capalize_word(word))
+
+        #finished one sentence, now add inner lists to parent lists.
+        Word_Ids.append(word_ids)
+        Cap_Ids.append(cap_ids)
+        S_Lens.append(len(X))
+
+        #Reset inner lists for the next sentence.
+        word_ids = []
+        cap_ids = []
+
+        #Y is the tags sequence for the sentence X.
+        for y in Y:
+            tag = y
+            tag_ids.append(process_tag(cfg, tag))
+
+        Tag_Ids.append(tag_ids)
+
+        #Reset inner list for the next sequence.
+        tag_ids = []
+
+
+    Char_Ids = []
+    W_Len = []
+    index = 0
+    for word_id, chars in Word_to_Chars.iteritems():
+        Char_Ids.append(chars)
+        W_Len.append(len(chars))
+        Word_to_Chars[word_id] = index
+        index += 1
+
+    #Word_Chars has a new id for each word of the sentence in the batch.
+    #This new id will map the word to its chars list in Char_Ids.
+    #This will be used to map word to its chars.
+    Word_Chars = []
+    for sentence in Word_Ids:
+        word_chars_id = []
+        for word_id in sentence:
+            word_chars_id.append(Word_to_Chars[word_id])
+
+        Word_Chars.append(word_chars_id)
+
+    #The processed batch is now a dictionary.
+    B = {
+        'ch': Char_Ids,
+        'w_len': W_Len,
+        'w_chs': Word_Chars,
+        'w': Word_Ids,
+        'w_cap': Cap_Ids,
+        's_len': S_Lens
+        }
+
+    if hasY:
+        B['tag'] = Tag_Ids
+    else:
+        B['tag'] = None
+
+    pad(cfg, B)
+
+    return B
+
+def pad(cfg, B):
+    #Dynamically select max sentence and word length for the current batch.
+    cfg.max_s_len = max(B['s_len'])
+    cfg.max_w_len = max(B['w_len'])
+
+    #Pad w with pad_id
+    for sentence in B['w']:
+        pad_lst = [cfg.pad_id] * (cfg.max_s_len-len(sentence))
+        sentence.extend(pad_lst)
+
+    #Pad w_cap with pad_id
+    for sentence in B['w_cap']:
+        pad_lst = [cfg.pad_id] * (cfg.max_s_len-len(sentence))
+        sentence.extend(pad_lst)
+
+    #Pad tag with pad_id
+    if B['tag'] is not None:
+        for sequence in B['tag']:
+            pad_lst = [cfg.pad_id] * (cfg.max_s_len-len(sequence))
+            sequence.extend(pad_lst)
+
+    #Pad ch with pad_id
+    for word in B['ch']:
+        pad_lst = [cfg.pad_id] * (cfg.max_w_len-len(word))
+        word.extend(pad_lst)
+
+    #Pad w_chs with pad_id
+    for sentence in B['w_chs']:
+        pad_lst = [cfg.pad_id] * (cfg.max_s_len-len(sentence))
+        sentence.extend(pad_lst)
+
+    return
