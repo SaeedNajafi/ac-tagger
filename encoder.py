@@ -35,10 +35,10 @@ class Encoder(nn.Module):
 
         self.drop = nn.Dropout(cfg.dropout)
 
-        self.param_init(cfg)
+        self.param_init()
         return
 
-    def param_init(self, cfg):
+    def param_init(self):
         for name, param in self.named_parameters():
             if 'bias' in name:
                 init.constant(param, 0.0)
