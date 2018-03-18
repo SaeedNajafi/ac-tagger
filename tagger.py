@@ -1,7 +1,9 @@
 from config import Configuration
-from model import Model
 from load import load_data
-from load import data_iterator
+from load import load_embeddings
+from feature import Feature
+from encoder import Encoder
+from indp import INDP
 import re
 import os
 import sys
@@ -10,72 +12,133 @@ import numpy as np
 import torch
 import torch.optim as optim
 
+#Global variables to keep models and the optimizers.
+feature = None
+encoder = None
+indp = None
+feature_optim = None
+encoder_optim = None
+indp_optim = None
 
-def run_epoch(config, model, optimizer):
-    # We're interested in keeping track of the loss during training
+def batch_to_tensors(cfg, in_B):
+    o_B = {}
+    o_B['ch'] = torch.LongTensor(in_B['ch'])
+    o_B['rev_ch'] = torch.LongTensor(in_B['rev_ch'])
+    o_B['w_len'] = torch.LongTensor(in_B['w_len'])
+    o_B['w'] = torch.LongTensor(in_B['w'])
+    o_B['w_chs'] = torch.LongTensor(in_B['w_chs'])
+    o_B['w_cap'] = torch.LongTensor(in_B['w_cap'])
+    o_B['w_mask'] = torch.FloatTensor(in_B['w_mask'])
+    if in_B['tag'] is not None:
+        o_B['tag'] = torch.LongTensor(in_B['tag'])
+    else:
+        o_B['tag'] = None
+
+    if in_B['tag'] is not None:
+        tag_one_hot = np.zeros((cfg.d_batch_size * cfg.max_s_len, cfg.tag_size))
+        tag_one_hot[np.arange(cfg.d_batch_size * cfg.max_s_len), np.reshape(in_B['tag'], (-1,))] = 1.0
+        tag_o_h = np.reshape(tag_one_hot, (cfg.d_batch_size, cfg.max_s_len, cfg.tag_size))
+        o_B['tag_o_h'] = torch.FloatTensor(tag_o_h)
+    else:
+        o_B['tag_o_h'] = None
+
+    return o_B
+
+def run_epoch(cfg):
+    cfg.local_mode = 'train'
+
     total_loss = []
-    total_steps = int(np.ceil(len(config.data['train']['w_d']) / float(config.batch_size)))
-    for step, data_dic in enumerate(data_iterator(config, 'train', True, total_steps)):
-        data_dic['p_b'] = config.dropout
-        optimizer.zero_grad()
-        log_probs = model((config, data_dic))
-        #if config.model_type=='INDP':
-        loss = model.ML_loss(log_probs)
-	loss.backward()
-        #torch.nn.utils.clip_grad_norm(model.parameters(), config.max_gradient_norm)
-        optimizer.step()
-        total_loss.append(loss.cpu().data.numpy())
+
+    #Turn on training mode which enables dropout.
+    feature.train()
+    encoder.train()
+    indp.train()
+
+    for step, batch in enumerate(load_data(cfg)):
+        feature.zero_grad()
+        encoder.zero_grad()
+        indp.zero_grad()
+        B = batch_to_tensors(cfg, batch)
+        F = feature(cfg, B)
+        H = encoder(cfg, F, B)
+        log_probs = indp(H)
+        loss = indp.ML_loss(B, log_probs)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm(indp.parameters(), cfg.max_gradient_norm)
+        torch.nn.utils.clip_grad_norm(encoder.parameters(), cfg.max_gradient_norm)
+        torch.nn.utils.clip_grad_norm(feature.parameters(), cfg.max_gradient_norm)
+        feature_optim.step()
+        encoder_optim.step()
+        indp_optim.step()
+        loss_value = loss.cpu().data.numpy()[0]
+        total_loss.append(loss_value)
         ##
-        sys.stdout.write('\r{} / {} : loss = {}'.format(
-                                                        step,
-                                                        total_steps,
-                                                        np.mean(total_loss)
-                                                        )
+        sys.stdout.write('\rStep:{} | Loss:{} | Mean Loss:{}'.format(
+                                                step,
+                                                loss_value,
+                                                np.mean(total_loss)
+                                                )
                         )
         sys.stdout.flush()
-    return np.mean(total_loss)
+    return
 
-def predict(config, model):
+def predict(cfg, o_file):
+    if cfg.mode=='train':
+        cfg.local_mode = 'dev'
 
-    """Make predictions from the provided model."""
-    outputs = []
-    if config.mode=='train':
-        local_mode = 'dev'
+    elif cfg.mode=='test':
+        cfg.local_mode = 'test'
 
-    elif config.mode=='test':
-        local_mode = 'test'
+    #Turn on evaluation mode which disables dropout.
+    feature.eval()
+    encoder.eval()
+    indp.eval()
 
-    total_steps = int(np.ceil(len(config.data[local_mode]['w_d']) / float(config.batch_size)))
-    for step, data_dic in enumerate(data_iterator(config, local_mode, False, total_steps)):
-        data_dic['p_b'] = 1.0
-        log_probs = model((config, data_dic))
-        if config.model_type=='INDP':
-             preds = np.argmax(log_probs.cpu().data.numpy(), axis=2)
-             outputs.append(preds)
-    return outputs
+    for batch in load_data(cfg):
+        B = batch_to_tensors(cfg, batch)
+        F = feature(cfg, B)
+        H = encoder(cfg, F, B)
+        log_probs = indp(H)
+        if cfg.model_type=='INDP':
+            print log_probs.cpu().data.numpy().shape()
+            preds = np.argmax(log_probs.cpu().data.numpy(), axis=2)
 
-def save_predictions(config, predictions, filename, local_mode):
+        save_predictions(cfg, batch, preds, o_file)
+
+    return
+
+def save_predictions(cfg, batch, preds, o_file):
     """Saves predictions to the provided file."""
-    with open(filename, "w") as f:
-        for batch_index in range(len(predictions)):
-            batch_predictions = predictions[batch_index]
-            b_size = len(batch_predictions)
-            for sentence_index in range(b_size):
-                ad = (batch_index * config.batch_size) + sentence_index
-                word_index = 0
-                while(word_index < config.data[local_mode]['s_len_d'][ad]):
-                    x = config.data[local_mode]['w_d'][ad][word_index]
-                    str_x = config.data['id_w'][x]
-                    pred = batch_predictions[sentence_index][word_index]
-                    str_pred = config.data['id_tag'][pred]
-                    f.write(str_x + '\t' + str_pred + '\n')
-                    word_index += 1
-                f.write("\n")
+    with open(o_file, "w") as f:
+        #Sentence index
+        s_idx = 0
+        for pred in preds:
+            #Word index inside sentence
+            w_idx = 0
 
-def eval_on_dev(config, filename):
+            while(w_idx < batch['s_len'][s_idx]):
+                #w is the word for which we predict a tag
+                w = batch['w'][s_idx][w_idx]
+                str_w = cfg.data['id_w'][w]
+
+                #tag is the predicted tag for w
+                tag = pred[w_idx]
+                str_tag = cfg.data['id_tag'][tag]
+
+                f.write(str_w + '\t' + str_tag + '\n')
+
+                #Go to the next word in the sentence
+                w_idx += 1
+
+            #Go to the next sentence
+            f.write("\n")
+            s_idx += 1
+    return
+
+def eval_on_dev(cfg, pred_file):
     #accuracy
-    ref_lines = open(config.dev_ref, 'r').readlines()
-    pred_lines = open(filename, 'r').readlines()
+    ref_lines = open(cfg.dev_ref, 'r').readlines()
+    pred_lines = open(pred_file, 'r').readlines()
 
     if len(ref_lines)!=len(pred_lines):
         print "INFO: Wrong number of lines in reference and prediction files for dev set."
@@ -98,55 +161,78 @@ def eval_on_dev(config, filename):
     return float(correct/total) * 100
 
 def run_model(mode, path, in_file, o_file):
-    config = Configuration()
-    config.mode = mode
-    if mode=='test': config.test_raw = in_file
-    load_data(config)
-    np.random.seed(config.seed)
-    torch.manual_seed(config.seed)
+    global feature, encoder, indp, feature_optim, encoder_optim, indp_optim
+
+    cfg = Configuration()
+    #General mode has two values: 'train' or 'test'
+    cfg.mode = mode
+
+    #Set Random Seeds
+    np.random.seed(cfg.seed)
+    torch.manual_seed(cfg.seed)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(config.seed)
-    model = Model(config)
+        torch.cuda.manual_seed_all(cfg.seed)
+
+    #Load Embeddings
+    load_embeddings(cfg)
+
+    #Only for testing
+    if mode=='test': cfg.test_raw = in_file
+
+    #Construct models
+    feature = Feature(cfg)
+    encoder = Encoder(cfg)
+    indp = INDP(cfg)
+    feature_optim = optim.Adam(feature.parameters(), lr=cfg.learning_rate)
+    encoder_optim = optim.Adam(encoder.parameters(), lr=cfg.learning_rate)
+    indp_optim = optim.Adam(indp.parameters(), lr=cfg.learning_rate)
+
+    #Move models to cuda if possible
     if torch.cuda.is_available():
-        model.cuda()
-    optimizer = optim.SGD(model.parameters(), lr=config.learning_rate)
+        feature.cuda()
+        encoder.cuda()
+        indp.cuda()
+
     if mode=='train':
+        o_file = './temp.predicted'
         best_val_cost = float('inf')
         best_val_epoch = 0
         first_start = time.time()
         epoch=0
-        while (epoch < config.max_epochs):
+        while (epoch < cfg.max_epochs):
             print
-            print 'Model:{} Epoch:{}'.format(config.model_type, epoch)
+            print 'Model:{} | Epoch:{}'.format(cfg.model_type, epoch)
             start = time.time()
-            train_loss = run_epoch(config, model, optimizer)
-            predictions = predict(config, model)
-            print '\nTraining loss: {}'.format(train_loss)
-            save_predictions(config, predictions, './temp.predicted', 'dev')
-            val_cost = 100 - eval_on_dev(config, './temp.predicted')
-            print 'Validation score: {}'.format(100 - val_cost)
+            run_epoch(cfg)
+            predict(cfg, o_file)
+            val_cost = 100 - eval_on_dev(cfg, o_file)
+            print 'Validation score:{}'.format(100 - val_cost)
             if val_cost < best_val_cost:
                 best_val_cost = val_cost
                 best_val_epoch = epoch
-                torch.save(model.state_dict(), path+'model_params')
+                torch.save(feature.state_dict(), path+'model_feature')
+                torch.save(encoder.state_dict(), path+'model_encoder')
+                torch.save(indp.state_dict(), path+'model_indp')
 
-            # For early stopping
-            if epoch - best_val_epoch > config.early_stopping:
+            #For early stopping
+            if epoch - best_val_epoch > cfg.early_stopping:
                 break
                 ###
 
-            print 'Epoch training time: {} seconds'.format(time.time() - start)
+            print 'Epoch training time:{} seconds'.format(time.time() - start)
             epoch += 1
-        print 'Total training time: {} seconds'.format(time.time() - first_start)
+
+        print 'Total training time:{} seconds'.format(time.time() - first_start)
+
     elif mode=='test':
-        model.load_state_dict(torch.load(path+'model_params'))
+        feature.load_state_dict(torch.load(path+'model_feature'))
+        encoder.load_state_dict(torch.load(path+'model_encoder'))
+        indp.load_state_dict(torch.load(path+'model_indp'))
         print
-        print 'Model:{} Predicting'.format(config.model_type)
+        print 'Model:{} Predicting'.format(cfg.model_type)
         start = time.time()
-        predictions = predict(config, model)
-        print 'Total prediction time: {} seconds'.format(time.time() - start)
-        print 'Writing predictions'
-        save_predictions(config, predictions, o_file, 'test')
+        predict(cfg, o_file)
+        print 'Total prediction time:{} seconds'.format(time.time() - start)
     return
 
 """

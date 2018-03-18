@@ -10,10 +10,7 @@ class Configuration(object):
     dev_raw = './ccg_data/' + 'ccg.dev.raw'
     dev_ref = './ccg_data/' + 'ccg.dev.ref'
 
-    unk = 'uunnkknnuu'
-    dig = 'ddiiggiidd'
-    rare = 'rraarreerraarr'
-    end = 'eennddnnee'
+
 
     """Model hyperparams and data information"""
     w_rnn_units = 512
@@ -23,7 +20,7 @@ class Configuration(object):
     dec_rnn_units = 512
     batch_size = 32
     dropout = 0.5
-    learning_rate = 0.05
+    learning_rate = 0.0005
     max_gradient_norm = 5.
     max_epochs = 128
     early_stopping = 5
