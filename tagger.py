@@ -94,45 +94,45 @@ def predict(cfg, o_file):
     encoder.eval()
     indp.eval()
 
+    #file stream to save predictions
+    f = open(o_file, 'w')
     for batch in load_data(cfg):
         B = batch_to_tensors(cfg, batch)
         F = feature(cfg, B)
         H = encoder(cfg, F, B)
         log_probs = indp(H)
         if cfg.model_type=='INDP':
-            print log_probs.cpu().data.numpy().shape()
             preds = np.argmax(log_probs.cpu().data.numpy(), axis=2)
 
-        save_predictions(cfg, batch, preds, o_file)
+        save_predictions(cfg, batch, preds, f)
 
+    f.close()
     return
 
-def save_predictions(cfg, batch, preds, o_file):
-    """Saves predictions to the provided file."""
-    with open(o_file, "w") as f:
-        #Sentence index
-        s_idx = 0
-        for pred in preds:
-            #Word index inside sentence
-            w_idx = 0
+def save_predictions(cfg, batch, preds, f):
+    """Saves predictions to the provided file stream."""
+    #Sentence index
+    s_idx = 0
+    for pred in preds:
+        #Word index inside sentence
+        w_idx = 0
+        while(w_idx < batch['s_len'][s_idx]):
+            #w is the word for which we predict a tag
+            w = batch['w'][s_idx][w_idx]
+            str_w = cfg.data['id_w'][w]
 
-            while(w_idx < batch['s_len'][s_idx]):
-                #w is the word for which we predict a tag
-                w = batch['w'][s_idx][w_idx]
-                str_w = cfg.data['id_w'][w]
+            #tag is the predicted tag for w
+            tag = pred[w_idx]
+            str_tag = cfg.data['id_tag'][tag]
+            f.write(str_w + '\t' + str_tag + '\n')
 
-                #tag is the predicted tag for w
-                tag = pred[w_idx]
-                str_tag = cfg.data['id_tag'][tag]
+            #Go to the next word in the sentence
+            w_idx += 1
 
-                f.write(str_w + '\t' + str_tag + '\n')
+        #Go to the next sentence
+        f.write("\n")
+        s_idx += 1
 
-                #Go to the next word in the sentence
-                w_idx += 1
-
-            #Go to the next sentence
-            f.write("\n")
-            s_idx += 1
     return
 
 def eval_on_dev(cfg, pred_file):
@@ -204,6 +204,7 @@ def run_model(mode, path, in_file, o_file):
             print 'Model:{} | Epoch:{}'.format(cfg.model_type, epoch)
             start = time.time()
             run_epoch(cfg)
+            print 'Model:{} Validation'.format(cfg.model_type, epoch)
             predict(cfg, o_file)
             val_cost = 100 - eval_on_dev(cfg, o_file)
             print 'Validation score:{}'.format(100 - val_cost)
