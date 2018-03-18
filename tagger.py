@@ -1,6 +1,6 @@
 from config import Configuration
-from load import load_data
 from load import load_embeddings
+from load import load_data
 from feature import Feature
 from encoder import Encoder
 from indp import INDP
@@ -12,7 +12,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 
-#Global variables to keep models and the optimizers.
+#Global variables for models and the optimizers.
 feature = None
 encoder = None
 indp = None
@@ -204,10 +204,10 @@ def run_model(mode, path, in_file, o_file):
             print 'Model:{} | Epoch:{}'.format(cfg.model_type, epoch)
             start = time.time()
             run_epoch(cfg)
-            print 'Model:{} Validation'.format(cfg.model_type, epoch)
+            print '\nModel:{} Validation'.format(cfg.model_type, epoch)
             predict(cfg, o_file)
             val_cost = 100 - eval_on_dev(cfg, o_file)
-            print 'Validation score:{}'.format(100 - val_cost)
+            print '\nValidation score:{}'.format(100 - val_cost)
             if val_cost < best_val_cost:
                 best_val_cost = val_cost
                 best_val_epoch = epoch
