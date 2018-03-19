@@ -183,7 +183,11 @@ class MLDecoder(nn.Module):
 
             #Greedily generated previous tag or the gold previous one?
             gold_prev_output = tag_ems[:,i,:]
-            _, gen_idx = nn.functional.softmax(score, dim=1).max(dim=1)
+            #The tag with the highest score will have the highest softmax probabiliy
+            #as exponential funciton is monotonically increasing.
+            #_, gen_idx = nn.functional.softmax(score, dim=1).max(dim=1)
+            #Commented for speed efficiency.
+            _, gen_idx = score.max(dim=1)
             generated_prev_output = self.tag_em(gen_idx)
             sw_expanded = sw[:,i].contiguous().view(-1,1).expand(-1, cfg.tag_em_size)
             prev_output = sw_expanded * generated_prev_output + (1-sw_expanded) * gold_prev_output
@@ -293,10 +297,13 @@ class MLDecoder(nn.Module):
             #For the next step
             h = output
 
-            _, gen_idx = nn.functional.softmax(score, dim=1).max(dim=1)
+            #_, gen_idx = nn.functional.softmax(score, dim=1).max(dim=1)
+            #The tag with the highest score will have the highest softmax probabiliy
+            #as exponential funciton is monotonically increasing.
+            _, gen_idx = score.max(dim=1)
             generated_prev_output = self.tag_em(gen_idx)
             prev_output = generated_prev_output
 
         log_probs = nn.functional.log_softmax(torch.stack(Scores, dim=1), dim=2)
         preds = np.argmax(log_probs.cpu().data.numpy(), axis=2)
-        return
+        return preds
