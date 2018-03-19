@@ -1,9 +1,11 @@
 from config import Configuration
 from load import load_embeddings
 from load import load_data
-from feature import Feature
-from encoder import Encoder
-from indp import INDP
+from modules.feature import Feature
+from modules.encoder import Encoder
+from modules.mldecoder import MLDecoder
+from modules.indp import INDP
+import random
 import re
 import os
 import sys
@@ -16,9 +18,11 @@ import torch.optim as optim
 feature = None
 encoder = None
 indp = None
+mldecoder = None
 feature_optim = None
 encoder_optim = None
 indp_optim = None
+mldecoder_optim = None
 
 def batch_to_tensors(cfg, in_B):
     o_B = {}
@@ -42,34 +46,41 @@ def batch_to_tensors(cfg, in_B):
     else:
         o_B['tag_o_h'] = None
 
-    return o_B
+    cfg.B = o_B
+    return
 
 def run_epoch(cfg):
     cfg.local_mode = 'train'
 
     total_loss = []
 
+    #cfg.sampling_p = 0.6
+    #cfg.sampling_bias = 10^3
+
     #Turn on training mode which enables dropout.
     feature.train()
     encoder.train()
-    indp.train()
+    #indp.train()
+    mldecoder.train()
 
     for step, batch in enumerate(load_data(cfg)):
         feature.zero_grad()
         encoder.zero_grad()
-        indp.zero_grad()
-        B = batch_to_tensors(cfg, batch)
-        F = feature(cfg, B)
-        H = encoder(cfg, F, B)
-        log_probs = indp(H)
-        loss = indp.ML_loss(B, log_probs)
+        #indp.zero_grad()
+        mldecoder.zero_grad()
+        batch_to_tensors(cfg, batch)
+        F = feature()
+        H = encoder(F)
+        #log_probs = indp(H)
+        log_probs = mldecoder(H)
+        loss = mldecoder.loss(log_probs)
         loss.backward()
-        torch.nn.utils.clip_grad_norm(indp.parameters(), cfg.max_gradient_norm)
+        torch.nn.utils.clip_grad_norm(mldecoder.parameters(), cfg.max_gradient_norm)
         torch.nn.utils.clip_grad_norm(encoder.parameters(), cfg.max_gradient_norm)
         torch.nn.utils.clip_grad_norm(feature.parameters(), cfg.max_gradient_norm)
         feature_optim.step()
         encoder_optim.step()
-        indp_optim.step()
+        mldecoder_optim.step()
         loss_value = loss.cpu().data.numpy()[0]
         total_loss.append(loss_value)
         ##
@@ -92,17 +103,17 @@ def predict(cfg, o_file):
     #Turn on evaluation mode which disables dropout.
     feature.eval()
     encoder.eval()
-    indp.eval()
+    mldecoder.eval()
 
     #file stream to save predictions
     f = open(o_file, 'w')
     for batch in load_data(cfg):
-        B = batch_to_tensors(cfg, batch)
-        F = feature(cfg, B)
-        H = encoder(cfg, F, B)
-        log_probs = indp(H)
-        if cfg.model_type=='INDP':
-            preds = np.argmax(log_probs.cpu().data.numpy(), axis=2)
+        batch_to_tensors(cfg, batch)
+        F = feature()
+        H = encoder(F)
+        preds = mldecoder.greedy(H)
+        #if cfg.model_type=='INDP':
+        #    preds = np.argmax(log_probs.cpu().data.numpy(), axis=2)
 
         save_predictions(cfg, batch, preds, f)
 
@@ -161,13 +172,14 @@ def eval_on_dev(cfg, pred_file):
     return float(correct/total) * 100
 
 def run_model(mode, path, in_file, o_file):
-    global feature, encoder, indp, feature_optim, encoder_optim, indp_optim
+    global feature, encoder, indp, feature_optim, encoder_optim, indp_optim, mldecoder, mldecoder_optim
 
     cfg = Configuration()
     #General mode has two values: 'train' or 'test'
     cfg.mode = mode
 
     #Set Random Seeds
+    random.seed(cfg.seed)
     np.random.seed(cfg.seed)
     torch.manual_seed(cfg.seed)
     if torch.cuda.is_available():
@@ -182,16 +194,22 @@ def run_model(mode, path, in_file, o_file):
     #Construct models
     feature = Feature(cfg)
     encoder = Encoder(cfg)
-    indp = INDP(cfg)
+    #indp = INDP(cfg)
+    mldecoder = MLDecoder(cfg)
+
+    cfg.mldecoder_type = 'TF'
+
     feature_optim = optim.Adam(feature.parameters(), lr=cfg.learning_rate)
     encoder_optim = optim.Adam(encoder.parameters(), lr=cfg.learning_rate)
-    indp_optim = optim.Adam(indp.parameters(), lr=cfg.learning_rate)
+    #indp_optim = optim.Adam(indp.parameters(), lr=cfg.learning_rate)
+    mldecoder_optim = optim.Adam(mldecoder.parameters(), lr=cfg.learning_rate)
 
     #Move models to cuda if possible
     if torch.cuda.is_available():
         feature.cuda()
         encoder.cuda()
-        indp.cuda()
+        mldecoder.cuda()
+        #indp.cuda()
 
     if mode=='train':
         o_file = './temp.predicted'
@@ -213,7 +231,8 @@ def run_model(mode, path, in_file, o_file):
                 best_val_epoch = epoch
                 torch.save(feature.state_dict(), path+'model_feature')
                 torch.save(encoder.state_dict(), path+'model_encoder')
-                torch.save(indp.state_dict(), path+'model_indp')
+                #torch.save(indp.state_dict(), path+'model_indp')
+                torch.save(mldecoder.state_dict(), path+'model_mldecoder')
 
             #For early stopping
             if epoch - best_val_epoch > cfg.early_stopping:
@@ -228,7 +247,8 @@ def run_model(mode, path, in_file, o_file):
     elif mode=='test':
         feature.load_state_dict(torch.load(path+'model_feature'))
         encoder.load_state_dict(torch.load(path+'model_encoder'))
-        indp.load_state_dict(torch.load(path+'model_indp'))
+        #indp.load_state_dict(torch.load(path+'model_indp'))
+        mldecoder.load_state_dict(torch.load(path+'model_mldecoder'))
         print
         print 'Model:{} Predicting'.format(cfg.model_type)
         start = time.time()
