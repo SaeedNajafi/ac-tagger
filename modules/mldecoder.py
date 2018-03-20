@@ -325,6 +325,15 @@ class MLDecoder(nn.Module):
         zeros = torch.zeros(cfg.d_batch_size, cfg.tag_em_size)
         Go_symbol = Variable(zeros.cuda()) if hasCuda else Variable(zeros)
 
+        lprob_candidates = torch.zeros(cfg.d_batch_size, beamsize*beamsize)
+        lprob_c = Variable(lprob_candidates.cuda()) if hasCuda else Variable(lprob_candidates)
+
+        tag_candidates = torch.zeros(cfg.d_batch_size, beamsize*beamsize)
+        tag_c = Variable(tag_candidates.cuda()) if hasCuda else Variable(tag_candidates)
+
+        h_candidates = torch.zeros(cfg.d_batch_size, beamsize, cfg.dec_rnn_units)
+        h_c = Variable(h_candidates.cuda()) if hasCuda else Variable(h_candidates)
+
         beam = []
         for i in range(cfg.max_s_len):
             Hi = H[:,i,:]
@@ -342,10 +351,6 @@ class MLDecoder(nn.Module):
                 prev_lprob = kprob
 
             else:
-                lprob_candidates = []
-                tag_candidates = []
-                h_candidates = []
-
                 prev_output = self.tag_em(prev_tag)
                 for b in range(beamsize):
                     input = torch.cat((prev_output[:,b,:], Hi), dim=1)
@@ -354,25 +359,22 @@ class MLDecoder(nn.Module):
                     score = self.affine(output_H)
                     log_prob = nn.functional.log_softmax(score, dim=1)
                     kprob, kidx = torch.topk(log_prob, beamsize, dim=1, largest=True, sorted=True)
-                    h_candidates.append(output)
+                    h_c.data[:,b,:] = output.data
 
                     for bb in range(beamsize):
-                        lprob_candidates.append(prev_lprob[:,b] + kprob[:,bb])
-                        tag_candidates.append(kidx[:,bb])
+                        lprob_c.data[:,beamsize*b + bb] = (prev_lprob[:,b] + kprob[:,bb]).data
+                        tag_c.data[:,beamsize*b + bb] = kidx[:,bb].data
 
-                lprob_c = torch.stack(lprob_candidates, dim=1)
                 prev_lprob, maxidx = torch.topk(lprob_c, beamsize, dim=1, largest=True, sorted=True)
-                tag_c = torch.stack(tag_candidates, dim=1)
                 new_tag = torch.gather(tag_c, 1, maxidx)
                 old_tag = torch.gather(prev_tag, 1, torch.remainder(maxidx, beamsize).long())
-                beam.insert(i-1, old_tag)
+                beam.append(old_tag)
                 prev_tag = new_tag
 
-                h_c = torch.stack(h_candidates, dim=1)
                 mmaxidx = torch.remainder(maxidx, beamsize).long()
-		h = torch.gather(h_c, 1, mmaxidx.view(-1, beamsize, 1).expand(-1, beamsize, cfg.dec_rnn_units))
-        
-	beam.append(new_tag)
-	bm = torch.stack(beam, dim=2)
+                h = torch.gather(h_c, 1, mmaxidx.view(-1, beamsize, 1).expand(-1, beamsize, cfg.dec_rnn_units))
+
+        beam.append(new_tag)
+        bm = torch.stack(beam, dim=2)
         preds = bm[:,0,:].cpu().data.numpy()
         return preds
