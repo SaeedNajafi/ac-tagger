@@ -326,7 +326,7 @@ class MLDecoder(nn.Module):
         lprob_candidates = torch.zeros(cfg.d_batch_size, beamsize*beamsize)
         lprob_c = Variable(lprob_candidates.cuda()) if hasCuda else Variable(lprob_candidates)
 
-        tag_candidates = torch.zeros(cfg.d_batch_size, beamsize*beamsize)
+        tag_candidates = torch.zeros(cfg.d_batch_size, beamsize*beamsize).long()
         tag_c = Variable(tag_candidates.cuda()) if hasCuda else Variable(tag_candidates)
 
         h_candidates = torch.zeros(cfg.d_batch_size, beamsize, cfg.dec_rnn_units)
@@ -356,17 +356,17 @@ class MLDecoder(nn.Module):
                     score = self.affine(output_H)
                     log_prob = nn.functional.log_softmax(score, dim=1)
                     kprob, kidx = torch.topk(log_prob, beamsize, dim=1, largest=True, sorted=True)
-                    h_c.data[:,b,:] = output.data
+                    h_c[:,b,:] = output
 
                     for bb in range(beamsize):
-                        lprob_c.data[:,beamsize*b + bb] = prev_lprob[:,b].data + kprob[:,bb].data
-                        tag_c.data[:,beamsize*b + bb] = kidx[:,bb].data
+                        lprob_c[:,beamsize*b + bb] = prev_lprob[:,b] + kprob[:,bb]
+                        tag_c[:,beamsize*b + bb] = kidx[:,bb]
 
                 prev_lprob, maxidx = torch.topk(lprob_c, beamsize, dim=1, largest=True, sorted=True)
-                new_tag = torch.gather(tag_c, 1, maxidx).long()
+                new_tag = torch.gather(tag_c, 1, maxidx)
                 old_tag = torch.gather(prev_tag, 1, torch.remainder(maxidx, beamsize).long())
-                bm.data[:,:,i-1] = old_tag.data
-                bm.data[:,:,i] = new_tag.data
+                bm[:,:,i-1] = old_tag
+                bm[:,:,i] = new_tag
                 prev_tag = new_tag
 
                 mmaxidx = torch.remainder(maxidx, beamsize).long()
