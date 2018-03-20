@@ -1,3 +1,4 @@
+
 import torch
 import numpy as np
 import torch.nn as nn
@@ -342,7 +343,7 @@ class MLDecoder(nn.Module):
                 log_prob = nn.functional.log_softmax(score, dim=1)
                 kprob, kidx = torch.topk(log_prob, beamsize, dim=1, largest=True, sorted=True)
                 #For the next time step.
-                h = tf.stack([output] * beamsize, dim=1)
+                h = torch.stack([output] * beamsize, dim=1)
                 prev_tag = kidx
                 prev_lprob = kprob
 
@@ -355,21 +356,21 @@ class MLDecoder(nn.Module):
                     score = self.affine(output_H)
                     log_prob = nn.functional.log_softmax(score, dim=1)
                     kprob, kidx = torch.topk(log_prob, beamsize, dim=1, largest=True, sorted=True)
-                    h_c.data[:,b,:] = output
+                    h_c.data[:,b,:] = output.data
 
                     for bb in range(beamsize):
-                        lprob_c.data[:,beamsize*b + bb] = prev_lprob[:,b] + kprob[:,bb]
-                        tag_c.data[:,beamsize*b + bb] = kidx[:,bb]
+                        lprob_c.data[:,beamsize*b + bb] = prev_lprob[:,b].data + kprob[:,bb].data
+                        tag_c.data[:,beamsize*b + bb] = kidx[:,bb].data
 
                 prev_lprob, maxidx = torch.topk(lprob_c, beamsize, dim=1, largest=True, sorted=True)
-                new_tag = torch.gather(tag_c, 1, maxidx)
-                old_tag = torch.gather(prev_tag, 1, torch.remainder(maxidx, beamsize))
-                bm.data[:,:,i-1] = old_tag
-                bm.data[:,:,i] = new_tag
+                new_tag = torch.gather(tag_c, 1, maxidx).long()
+                old_tag = torch.gather(prev_tag, 1, torch.remainder(maxidx, beamsize).long())
+                bm.data[:,:,i-1] = old_tag.data
+                bm.data[:,:,i] = new_tag.data
                 prev_tag = new_tag
 
-                mmaxidx = torch.remainder(maxidx, beamsize)
-                h = torch.index_select(h_c.view(-1,cfg.dec_rnn_units), mmaxindex.view(-1,)).view(-1,beamsize,cfg.dec_rnn_units)
+                mmaxidx = torch.remainder(maxidx, beamsize).long()
+                h = torch.index_select(h_c.view(-1,cfg.dec_rnn_units), 1, mmaxidx.view(-1,)).view(-1,beamsize,cfg.dec_rnn_units)
 
         preds = bm[:,0,:].cpu().data.numpy()
         return preds
