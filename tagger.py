@@ -84,7 +84,7 @@ def run_epoch(cfg):
         loss_value = loss.cpu().data.numpy()[0]
         total_loss.append(loss_value)
         ##
-        sys.stdout.write('\rStep:{} | Loss:{} | Mean Loss:{}'.format(
+        sys.stdout.write('\Batch:{} | Loss:{} | Mean Loss:{}'.format(
                                                 step,
                                                 loss_value,
                                                 np.mean(total_loss)
@@ -111,7 +111,8 @@ def predict(cfg, o_file):
         batch_to_tensors(cfg, batch)
         F = feature()
         H = encoder(F)
-        preds = mldecoder.greedy(H)
+        #preds = mldecoder.greedy(H)
+        preds = mldecoder.beam(H)
         #if cfg.model_type=='INDP':
         #    preds = np.argmax(log_probs.cpu().data.numpy(), axis=2)
 
@@ -177,6 +178,7 @@ def run_model(mode, path, in_file, o_file):
     cfg = Configuration()
     #General mode has two values: 'train' or 'test'
     cfg.mode = mode
+    cfg.beamsize = 4
 
     #Set Random Seeds
     random.seed(cfg.seed)

@@ -272,6 +272,9 @@ class MLDecoder(nn.Module):
     def greedy(self, H):
         cfg = self.cfg
 
+        #zero the pad vector
+        self.tag_em.weight.data[cfg.tag_pad_id].fill_(0.0)
+
         #Create a variable for initial hidden vector of RNN.
         zeros = torch.zeros(cfg.d_batch_size, cfg.dec_rnn_units)
         h0 = Variable(zeros.cuda()) if hasCuda else Variable(zeros)
@@ -307,3 +310,62 @@ class MLDecoder(nn.Module):
         log_probs = nn.functional.log_softmax(torch.stack(Scores, dim=1), dim=2)
         preds = np.argmax(log_probs.cpu().data.numpy(), axis=2)
         return preds
+
+    def beam(self, H):
+        cfg = self.cfg
+        beamsize = cfg.beamsize
+
+        #zero the pad vector
+        self.tag_em.weight.data[cfg.tag_pad_id].fill_(0.0)
+
+        #Create a variable for initial hidden vector of RNN.
+        zeros = torch.zeros(cfg.d_batch_size, cfg.dec_rnn_units)
+        h0 = Variable(zeros.cuda()) if hasCuda else Variable(zeros)
+
+        #Create a variable for the initial previous tag.
+        zeros = torch.zeros(cfg.d_batch_size, cfg.tag_em_size)
+        Go_symbol = Variable(zeros.cuda()) if hasCuda else Variable(zeros)
+
+        for i in range(cfg.max_s_len):
+            if i==0:
+                input = torch.cat((Go_symbol, H[:,i,:]), dim=1)
+                output = self.dec_rnn(input, h0)
+                output_H = torch.cat((output, H[:,i,:]), dim=1)
+                score = self.affine(output_H)
+                kscore, kindex = torch.topk(score, beamsize, dim=1, largest=True, sorted=True)
+                prev_h = torch.stack([output] * beamsize, dim=1)
+                prev_score = kscore
+                prev_tag = kindex
+                beam = kindex.view(-1,-1,1)
+
+            else:
+                score_candidates = []
+                h_candidates = []
+                tag_candidates = []
+                beam_candidates = []
+                prev_output = self.tag_em(prev_tag)
+                for b in range(beamsize):
+                    input = torch.cat((prev_output[:,b,:], H[:,i,:]), dim=1)
+                    output = self.dec_rnn(input, prev_h[:,b,:])
+                    output_H = torch.cat((output, H[:,i,:]), dim=1)
+                    score = self.affine(output_H)
+                    kscore, kindex = torch.topk(score, beamsize, dim=1, largest=True, sorted=True)
+
+                    for bb in range(beamsize):
+                        score_candidates.append(prev_score[:,b] + kscore[:,bb])
+                        h_candidates.append(output)
+                        tag_candidates.append(kindex[:,bb])
+                        beam_candidates.append(torch.cat((beam[:,b,:], kindex[:,bb].view(-1,1)), dim=1))
+
+                score_tensor = torch.stack(score_candidates, dim=1)
+                h_tensor = torch.stack(h_candidates, dim=1)
+                tag_tensor = torch.stack(tag_candidates, dim=1)
+                beam_tensor = torch.stack(beam_candidates, dim=1)
+
+                prev_score, maxindex = torch.topk(score_tensor, beamsize, dim=1, largest=True, sorted=True)
+                prev_h = torch.gather(h_tensor, maxindex.view(-1,-1,1).expand(-1,-1,cfg.dec_rnn_units))
+                prev_tag = torch.gather(tag_tensor, maxindex)
+                beam = torch.gather(beam_tensor, maxindex.view(-1,-1,1).expand(-1,-1,i+1))
+
+        preds = beam[:,0,:].cpu().data.numpy()
+        return
