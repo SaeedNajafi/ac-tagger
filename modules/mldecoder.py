@@ -183,11 +183,7 @@ class MLDecoder(nn.Module):
 
             #Greedily generated previous tag or the gold previous one?
             gold_prev_output = tag_ems[:,i,:]
-            #The tag with the highest score will have the highest softmax probabiliy
-            #as exponential funciton is monotonically increasing.
-            #_, gen_idx = nn.functional.softmax(score, dim=1).max(dim=1)
-            #Commented for speed efficiency.
-            _, gen_idx = score.max(dim=1)
+            _, gen_idx = nn.functional.softmax(score, dim=1).max(dim=1)
             generated_prev_output = self.tag_em(gen_idx)
             sw_expanded = sw[:,i].contiguous().view(-1,1).expand(-1, cfg.tag_em_size)
             prev_output = sw_expanded * generated_prev_output + (1-sw_expanded) * gold_prev_output
@@ -300,10 +296,7 @@ class MLDecoder(nn.Module):
             #For the next step
             h = output
 
-            #_, gen_idx = nn.functional.softmax(score, dim=1).max(dim=1)
-            #The tag with the highest score will have the highest softmax probabiliy
-            #as exponential funciton is monotonically increasing.
-            _, gen_idx = score.max(dim=1)
+            _, gen_idx = nn.functional.softmax(score, dim=1).max(dim=1)
             generated_prev_output = self.tag_em(gen_idx)
             prev_output = generated_prev_output
 
@@ -326,46 +319,57 @@ class MLDecoder(nn.Module):
         zeros = torch.zeros(cfg.d_batch_size, cfg.tag_em_size)
         Go_symbol = Variable(zeros.cuda()) if hasCuda else Variable(zeros)
 
+        beam = torch.zeros(cfg.d_batch_size, beamsize, cfg.max_s_len)
+        bm = Variable(beam.cuda()) if hasCuda else Variable(beam)
+
+        lprob_candidates = torch.zeros(cfg.d_batch_size, beamsize*beamsize)
+        lprob_c = Variable(lprob_candidates.cuda()) if hasCuda else Variable(lprob_candidates)
+
+        tag_candidates = torch.zeros(cfg.d_batch_size, beamsize*beamsize)
+        tag_c = Variable(tag_candidates.cuda()) if hasCuda else Variable(tag_candidates)
+
+        h_candidates = torch.zeros(cfg.d_batch_size, beamsize, cfg.dec_rnn_units)
+        h_c = Variable(h_candidates.cuda()) if hasCuda else Variable(h_candidates)
+
         for i in range(cfg.max_s_len):
+            Hi = H[:,i,:]
+
             if i==0:
-                input = torch.cat((Go_symbol, H[:,i,:]), dim=1)
+                input = torch.cat((Go_symbol, Hi), dim=1)
                 output = self.dec_rnn(input, h0)
-                output_H = torch.cat((output, H[:,i,:]), dim=1)
+                output_H = torch.cat((output, Hi), dim=1)
                 score = self.affine(output_H)
-                kscore, kindex = torch.topk(score, beamsize, dim=1, largest=True, sorted=True)
-                prev_h = torch.stack([output] * beamsize, dim=1)
-                prev_score = kscore
-                prev_tag = kindex
-                beam = kindex.view(-1,-1,1)
+                log_prob = nn.functional.log_softmax(score, dim=1)
+                kprob, kidx = torch.topk(log_prob, beamsize, dim=1, largest=True, sorted=True)
+                #For the next time step.
+                h = tf.stack([output] * beamsize, dim=1)
+                prev_tag = kidx
+                prev_lprob = kprob
 
             else:
-                score_candidates = []
-                h_candidates = []
-                tag_candidates = []
-                beam_candidates = []
                 prev_output = self.tag_em(prev_tag)
                 for b in range(beamsize):
-                    input = torch.cat((prev_output[:,b,:], H[:,i,:]), dim=1)
-                    output = self.dec_rnn(input, prev_h[:,b,:])
-                    output_H = torch.cat((output, H[:,i,:]), dim=1)
+                    input = torch.cat((prev_output[:,b,:], Hi), dim=1)
+                    output = self.dec_rnn(input, h[:,b,:])
+                    output_H = torch.cat((output, Hi), dim=1)
                     score = self.affine(output_H)
-                    kscore, kindex = torch.topk(score, beamsize, dim=1, largest=True, sorted=True)
+                    log_prob = nn.functional.log_softmax(score, dim=1)
+                    kprob, kidx = torch.topk(log_prob, beamsize, dim=1, largest=True, sorted=True)
+                    h_c.data[:,b,:] = output
 
                     for bb in range(beamsize):
-                        score_candidates.append(prev_score[:,b] + kscore[:,bb])
-                        h_candidates.append(output)
-                        tag_candidates.append(kindex[:,bb])
-                        beam_candidates.append(torch.cat((beam[:,b,:], kindex[:,bb].view(-1,1)), dim=1))
+                        lprob_c.data[:,beamsize*b + bb] = prev_lprob[:,b] + kprob[:,bb]
+                        tag_c.data[:,beamsize*b + bb] = kidx[:,bb]
 
-                score_tensor = torch.stack(score_candidates, dim=1)
-                h_tensor = torch.stack(h_candidates, dim=1)
-                tag_tensor = torch.stack(tag_candidates, dim=1)
-                beam_tensor = torch.stack(beam_candidates, dim=1)
+                prev_lprob, maxidx = torch.topk(lprob_c, beamsize, dim=1, largest=True, sorted=True)
+                new_tag = torch.gather(tag_c, 1, maxidx)
+                old_tag = torch.gather(prev_tag, 1, torch.remainder(maxidx, beamsize))
+                bm.data[:,:,i-1] = old_tag
+                bm.data[:,:,i] = new_tag
+                prev_tag = new_tag
 
-                prev_score, maxindex = torch.topk(score_tensor, beamsize, dim=1, largest=True, sorted=True)
-                prev_h = torch.gather(h_tensor, maxindex.view(-1,-1,1).expand(-1,-1,cfg.dec_rnn_units))
-                prev_tag = torch.gather(tag_tensor, maxindex)
-                beam = torch.gather(beam_tensor, maxindex.view(-1,-1,1).expand(-1,-1,i+1))
+                mmaxidx = torch.remainder(maxidx, beamsize)
+                h = torch.index_select(h_c.view(-1,cfg.dec_rnn_units), mmaxindex.view(-1,)).view(-1,beamsize,cfg.dec_rnn_units)
 
-        preds = beam[:,0,:].cpu().data.numpy()
-        return
+        preds = bm[:,0,:].cpu().data.numpy()
+        return preds
