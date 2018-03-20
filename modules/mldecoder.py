@@ -328,7 +328,7 @@ class MLDecoder(nn.Module):
         lprob_candidates = torch.zeros(cfg.d_batch_size, beamsize*beamsize)
         lprob_c = Variable(lprob_candidates.cuda()) if hasCuda else Variable(lprob_candidates)
 
-        tag_candidates = torch.zeros(cfg.d_batch_size, beamsize*beamsize)
+        tag_candidates = torch.zeros(cfg.d_batch_size, beamsize*beamsize).long()
         tag_c = Variable(tag_candidates.cuda()) if hasCuda else Variable(tag_candidates)
 
         h_candidates = torch.zeros(cfg.d_batch_size, beamsize, cfg.dec_rnn_units)
