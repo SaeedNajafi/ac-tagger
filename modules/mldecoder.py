@@ -1,4 +1,3 @@
-
 import torch
 import numpy as np
 import torch.nn as nn
@@ -109,17 +108,18 @@ class MLDecoder(nn.Module):
 
         Scores = []
         for i in range(cfg.max_s_len):
+            Hi = H[:,i,:]
             if i==0:
                 prev_output = Go_symbol
                 h = h0
 
-            input = torch.cat((prev_output, H[:,i,:]), dim=1)
+            input = torch.cat((prev_output, Hi), dim=1)
             input_dr = self.drop(input)
 
             output = self.dec_rnn(input_dr, h)
 
             output_dr = self.drop(output)
-            output_dr_H = torch.cat((output_dr, H[:,i,:]), dim=1)
+            output_dr_H = torch.cat((output_dr, Hi), dim=1)
 
             score = self.affine(output_dr_H)
             Scores.append(score)
@@ -147,6 +147,7 @@ class MLDecoder(nn.Module):
         switch = torch.ge(flip_coin, sp).float()
 
         sw = Variable(switch.cuda()) if hasCuda else Variable(switch)
+        sw_expanded = sw.view(-1, cfg.max_s_len, 1).expand(-1, cfg.max_s_len, cfg.tag_em_size)
 
         #zero the pad vector
         self.tag_em.weight.data[cfg.tag_pad_id].fill_(0.0)
@@ -165,17 +166,18 @@ class MLDecoder(nn.Module):
 
         Scores = []
         for i in range(cfg.max_s_len):
+            Hi = H[:,i,:]
             if i==0:
                 prev_output = Go_symbol
                 h = h0
 
-            input = torch.cat((prev_output, H[:,i,:]), dim=1)
+            input = torch.cat((prev_output, Hi), dim=1)
             input_dr = self.drop(input)
 
             output = self.dec_rnn(input_dr, h)
 
             output_dr = self.drop(output)
-            output_dr_H = torch.cat((output_dr, H[:,i,:]), dim=1)
+            output_dr_H = torch.cat((output_dr, Hi), dim=1)
             score = self.affine(output_dr_H)
             Scores.append(score)
 
@@ -186,8 +188,8 @@ class MLDecoder(nn.Module):
             gold_prev_output = tag_ems[:,i,:]
             _, gen_idx = nn.functional.softmax(score, dim=1).max(dim=1)
             generated_prev_output = self.tag_em(gen_idx)
-            sw_expanded = sw[:,i].contiguous().view(-1,1).expand(-1, cfg.tag_em_size)
-            prev_output = sw_expanded * generated_prev_output + (1-sw_expanded) * gold_prev_output
+            sw_expanded_i = sw_expanded[:,i,:]
+            prev_output = sw_expanded_i * generated_prev_output + (1-sw_expanded_i) * gold_prev_output
 
         #Return log_probs
         return nn.functional.log_softmax(torch.stack(Scores, dim=1), dim=2)
@@ -209,6 +211,7 @@ class MLDecoder(nn.Module):
         switch = torch.ge(flip_coin, sp).float()
 
         sw = Variable(switch.cuda()) if hasCuda else Variable(switch)
+        sw_expanded = sw.view(-1, cfg.max_s_len, 1).expand(-1, cfg.max_s_len, cfg.tag_em_size)
 
         #zero the pad vector
         self.tag_em.weight.data[cfg.tag_pad_id].fill_(0.0)
@@ -226,17 +229,18 @@ class MLDecoder(nn.Module):
 
         Scores = []
         for i in range(cfg.max_s_len):
+            Hi = H[:,i,:]
             if i==0:
                 prev_output = Go_symbol
                 h = h0
 
-            input = torch.cat((prev_output, H[:,i,:]), dim=1)
+            input = torch.cat((prev_output, Hi), dim=1)
             input_dr = self.drop(input)
 
             output = self.dec_rnn(input_dr, h)
 
             output_dr = self.drop(output)
-            output_dr_H = torch.cat((output_dr, H[:,i,:]), dim=1)
+            output_dr_H = torch.cat((output_dr, Hi), dim=1)
             score = self.affine(output_dr_H)
             Scores.append(score)
 
@@ -250,8 +254,8 @@ class MLDecoder(nn.Module):
             averaging_weights = nn.functional.softmax(bias * score, dim=1)
             #Weighted average of all tag embeddings biased strongly towards the greedy best tag.
             generated_prev_output = torch.mm(averaging_weights, self.tag_em.weight)
-            sw_expanded = sw[:,i].contiguous().view(-1,1).expand(-1, cfg.tag_em_size)
-            prev_output = sw_expanded * generated_prev_output + (1-sw_expanded) * gold_prev_output
+            sw_expanded_i = sw_expanded[:,i,:]
+            prev_output = sw_expanded_i * generated_prev_output + (1-sw_expanded_i) * gold_prev_output
 
         #Return log_probs
         return nn.functional.log_softmax(torch.stack(Scores, dim=1), dim=2)
@@ -282,15 +286,16 @@ class MLDecoder(nn.Module):
 
         Scores = []
         for i in range(cfg.max_s_len):
+            H_i = H[:,i,:]
             if i==0:
                 prev_output = Go_symbol
                 h = h0
 
-            input = torch.cat((prev_output, H[:,i,:]), dim=1)
+            input = torch.cat((prev_output, H_i), dim=1)
 
             output = self.dec_rnn(input, h)
 
-            output_H = torch.cat((output, H[:,i,:]), dim=1)
+            output_H = torch.cat((output, H_i), dim=1)
             score = self.affine(output_H)
             Scores.append(score)
 
@@ -320,21 +325,9 @@ class MLDecoder(nn.Module):
         zeros = torch.zeros(cfg.d_batch_size, cfg.tag_em_size)
         Go_symbol = Variable(zeros.cuda()) if hasCuda else Variable(zeros)
 
-        beam = torch.zeros(cfg.d_batch_size, beamsize, cfg.max_s_len)
-        bm = Variable(beam.cuda()) if hasCuda else Variable(beam)
-
-        lprob_candidates = torch.zeros(cfg.d_batch_size, beamsize*beamsize)
-        lprob_c = Variable(lprob_candidates.cuda()) if hasCuda else Variable(lprob_candidates)
-
-        tag_candidates = torch.zeros(cfg.d_batch_size, beamsize*beamsize).long()
-        tag_c = Variable(tag_candidates.cuda()) if hasCuda else Variable(tag_candidates)
-
-        h_candidates = torch.zeros(cfg.d_batch_size, beamsize, cfg.dec_rnn_units)
-        h_c = Variable(h_candidates.cuda()) if hasCuda else Variable(h_candidates)
-
+        beam = []
         for i in range(cfg.max_s_len):
             Hi = H[:,i,:]
-
             if i==0:
                 input = torch.cat((Go_symbol, Hi), dim=1)
                 output = self.dec_rnn(input, h0)
@@ -342,12 +335,17 @@ class MLDecoder(nn.Module):
                 score = self.affine(output_H)
                 log_prob = nn.functional.log_softmax(score, dim=1)
                 kprob, kidx = torch.topk(log_prob, beamsize, dim=1, largest=True, sorted=True)
+
                 #For the next time step.
                 h = torch.stack([output] * beamsize, dim=1)
                 prev_tag = kidx
                 prev_lprob = kprob
 
             else:
+                lprob_candidates = []
+                tag_candidates = []
+                h_candidates = []
+
                 prev_output = self.tag_em(prev_tag)
                 for b in range(beamsize):
                     input = torch.cat((prev_output[:,b,:], Hi), dim=1)
@@ -356,21 +354,25 @@ class MLDecoder(nn.Module):
                     score = self.affine(output_H)
                     log_prob = nn.functional.log_softmax(score, dim=1)
                     kprob, kidx = torch.topk(log_prob, beamsize, dim=1, largest=True, sorted=True)
-                    h_c[:,b,:] = output
+                    h_candidates.append(output)
 
                     for bb in range(beamsize):
-                        lprob_c[:,beamsize*b + bb] = prev_lprob[:,b] + kprob[:,bb]
-                        tag_c[:,beamsize*b + bb] = kidx[:,bb]
+                        lprob_candidates.append(prev_lprob[:,b] + kprob[:,bb])
+                        tag_candidates.append(kidx[:,bb])
 
+                lprob_c = torch.stack(lprob_candidates, dim=1)
                 prev_lprob, maxidx = torch.topk(lprob_c, beamsize, dim=1, largest=True, sorted=True)
+                tag_c = torch.stack(tag_candidates, dim=1)
                 new_tag = torch.gather(tag_c, 1, maxidx)
                 old_tag = torch.gather(prev_tag, 1, torch.remainder(maxidx, beamsize).long())
-                bm[:,:,i-1] = old_tag
-                bm[:,:,i] = new_tag
+                beam.insert(i-1, old_tag)
+                beam.insert(i, new_tag)
                 prev_tag = new_tag
 
+                h_c = torch.stack(h_candidates, dim=1)
                 mmaxidx = torch.remainder(maxidx, beamsize).long()
                 h = torch.index_select(h_c.view(-1,cfg.dec_rnn_units), 1, mmaxidx.view(-1,)).view(-1,beamsize,cfg.dec_rnn_units)
 
+        bm = torch.stack(beam, dim=2)
         preds = bm[:,0,:].cpu().data.numpy()
         return preds
