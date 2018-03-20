@@ -366,13 +366,13 @@ class MLDecoder(nn.Module):
                 new_tag = torch.gather(tag_c, 1, maxidx)
                 old_tag = torch.gather(prev_tag, 1, torch.remainder(maxidx, beamsize).long())
                 beam.insert(i-1, old_tag)
-                beam.insert(i, new_tag)
                 prev_tag = new_tag
 
                 h_c = torch.stack(h_candidates, dim=1)
                 mmaxidx = torch.remainder(maxidx, beamsize).long()
-                h = torch.index_select(h_c.view(-1,cfg.dec_rnn_units), 1, mmaxidx.view(-1,)).view(-1,beamsize,cfg.dec_rnn_units)
-
-        bm = torch.stack(beam, dim=2)
+		h = torch.gather(h_c, 1, mmaxidx.view(-1, beamsize, 1).expand(-1, beamsize, cfg.dec_rnn_units))
+        
+	beam.append(new_tag)
+	bm = torch.stack(beam, dim=2)
         preds = bm[:,0,:].cpu().data.numpy()
         return preds
