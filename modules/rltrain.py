@@ -30,7 +30,7 @@ class RLTrain(nn.Module):
 
         self.layer2 = nn.Linear(
                             self.cr_size,
-                            self.cr_size,
+                            1,
                             bias=True
                             )
 
@@ -54,13 +54,13 @@ class RLTrain(nn.Module):
 
         #We do not apply any dropout layer as this is a regression model
         #and the optimizer will apply L2 regularization on the weights.
-        H1 = nn.functional.tanh(self.layer1(in_S))
-        #H1 is now between -1 and 1
-        H2 =  nn.functional.relu(self.layer2(H1))
-        #H2 is now between 0 and 1
+        H1 = nn.functional.relu(self.layer1(in_S))
+
+        H2 =  nn.functional.sigmoid(self.layer2(H1))
+        #H2 is now scaler between 0 and 1
 
         v = torch.div(H2, 1.0-l)
-        #v is now between 0 and 1.0-l which are the boundries for returns w.r.t. l and 0/1 rewards.
+        #v is now scaler between 0 and 1.0-l which are the boundries for returns w.r.t. l and 0/1 rewards.
         return v
 
     #least square loss for V.
@@ -131,8 +131,8 @@ class RLTrain(nn.Module):
 
             output_H = torch.cat((output_dr, H_i), dim=1)
 
-            v = self.V(l, output_H)
-            V_es.append(v)
+            #v = self.V(l, output_H)
+            #V_es.append(v)
 
             score = affine(output_H)
 
@@ -145,9 +145,9 @@ class RLTrain(nn.Module):
             taken_actions.append(gen_idx)
             action_log_policies.append(log_p)
 
-        V_es = torch.stack(V_es, dim=1)
+        #V_es = torch.stack(V_es, dim=1)
         taken_actions = torch.stack(taken_actions, dim=1)
-        action_log_policies = torch.stack(action_policies, dim=1)
+        action_log_policies = torch.stack(action_log_policies, dim=1)
 
         type = cfg.rltrain_type
         if type=='R':
@@ -174,24 +174,19 @@ class RLTrain(nn.Module):
 
         is_true_tag = torch.eq(taken_actions, tag).float()
         #0/1 reward (hamming loss) for each prediction.
-        R = is_true_tag.float() * w_mask
-        rewards = Variable(R.cuda()) if hasCuda else Variable(R)
-
+        rewards = is_true_tag * w_mask
         #Monte Carlo Returns
         MC_Returns = []
-        zeros = torch.zeros(cfg.d_batch_size,)
-        zeros = Variable(zeros.cuda()) if hasCuda else Variable(zeros)
         for i in range(cfg.max_s_len):
-            ret = zeros
-            for j in range(0, cfg.max_s_len - i):
-                ret += (l ** j) * rewards[:,i + j]
+            ret = rewards[:,i].data
+            for j in range(1, cfg.max_s_len - i):
+                ret += (l ** j) * rewards[:,i + j].data
             MC_Returns.append(ret)
-
+	
         Returns = torch.stack(MC_Returns, dim=1)
-
         #Do not back propagate through Returns!
-        delta = Variable(Returns.data, requires_grad=False)
-        rlloss = action_log_policies * (delta) * w_mask
+        delta = Variable(Returns, requires_grad=False)
+        rlloss = -torch.mean(torch.mean(action_log_policies * (delta) * w_mask, dim=1), dim=0)
 
         #the none is for critic loss, we do not train critic in basic REINFORCE.
         return rlloss, None
@@ -203,10 +198,9 @@ class RLTrain(nn.Module):
         tag = Variable(cfg.B['tag'].cuda()) if hasCuda else Variable(cfg.B['tag'])
         w_mask = Variable(cfg.B['w_mask'].cuda()) if hasCuda else Variable(cfg.B['w_mask'])
 
-        is_true_tag = torch.eq(taken_actions, tag)
+        is_true_tag = torch.eq(taken_actions, tag).float()
         #0/1 reward (hamming loss) for each prediction.
-        R = is_true_tag.float() * w_mask
-        rewards = Variable(R.cuda()) if hasCuda else Variable(R)
+        rewards = is_true_tag * w_mask
 
         V_es = V_es * w_mask
 
@@ -224,8 +218,8 @@ class RLTrain(nn.Module):
 
         #Do not back propagate through Returns and V_es!
         delta = Variable(Returns.data - V_es.data, requires_grad=False)
-        rlloss = action_log_policies * (delta) * w_mask
-
+        rlloss = -torch.mean(torch.mean(action_log_policies * (delta) * w_mask, dim=1), dim=0)
+	
         vloss = self.V_loss(Returns, V_es)
 
         return rlloss, vloss
@@ -238,10 +232,9 @@ class RLTrain(nn.Module):
         tag = Variable(cfg.B['tag'].cuda()) if hasCuda else Variable(cfg.B['tag'])
         w_mask = Variable(cfg.B['w_mask'].cuda()) if hasCuda else Variable(cfg.B['w_mask'])
 
-        is_true_tag = torch.eq(taken_actions, tag)
+        is_true_tag = torch.eq(taken_actions, tag).float()
         #0/1 reward (hamming loss) for each prediction.
-        R = is_true_tag.float() * w_mask
-        rewards = Variable(R.cuda()) if hasCuda else Variable(R)
+        rewards = is_true_tag * w_mask
 
         V_es = V_es * w_mask
 
@@ -263,7 +256,7 @@ class RLTrain(nn.Module):
 
         #Do not back propagate through Returns and V_es!
         delta = Variable(Returns.data - V_es.data, requires_grad=False)
-        rlloss = action_log_policies * (delta) * w_mask
+        rlloss = -torch.mean(torch.mean(action_log_policies * (delta) * w_mask, dim=1), dim=0)
         vloss = self.V_loss(Returns, V_es)
 
         return rlloss, vloss

@@ -14,6 +14,7 @@ import time
 import numpy as np
 import torch
 import torch.optim as optim
+from torch.autograd import Variable
 
 #Global variables for models and the optimizers.
 feature = None
@@ -55,7 +56,10 @@ def batch_to_tensors(cfg, in_B):
 
 def run_epoch(cfg):
     cfg.local_mode = 'train'
-
+    if torch.cuda.is_available():
+    	a = Variable(torch.FloatTensor(np.atleast_1d(cfg.a)).cuda())
+    else:
+	a = Variable(torch.FloatTensor(np.atleast_1d(cfg.a))) 
     total_loss = []
     vtotal_loss = []
     #cfg.sampling_p = 0.6
@@ -80,11 +84,20 @@ def run_epoch(cfg):
         H = encoder(F)
         #log_probs = indp(H)
         log_probs = mldecoder(H)
-        mlloss = mldecoder.loss(log_probs)
+        #mlloss = mldecoder.loss(log_probs)
         rlloss, vloss = rltrain(H, mldecoder)
-        loss = (1-cfg.a) * mlloss + cfg.a * rlloss
+	#print vloss.size()
+	#print vloss
+	#print rlloss.size()
+	#print rlloss
+	#print mlloss.size()
+	#print mlloss
+        #loss = (1-a) * mlloss + a * rlloss
+	#print loss.size()
+	#print loss
+	loss = rlloss
         loss.backward()
-        vloss.backward()
+        #vloss.backward()
         torch.nn.utils.clip_grad_norm(mldecoder.parameters(), cfg.max_gradient_norm)
         torch.nn.utils.clip_grad_norm(encoder.parameters(), cfg.max_gradient_norm)
         torch.nn.utils.clip_grad_norm(feature.parameters(), cfg.max_gradient_norm)
@@ -97,7 +110,8 @@ def run_epoch(cfg):
 
         loss_value = loss.cpu().data.numpy()[0]
         total_loss.append(loss_value)
-        vloss_value = vloss.cpu().data.numpy()[0]
+        #vloss_value = vloss.cpu().data.numpy()[0]
+	vloss_value = 0
         vtotal_loss.append(vloss_value)
         ##
         sys.stdout.write('\rBatch:{} | Loss:{} | Mean Loss:{} | VLoss:{} | Mean VLoss:{}'.format(
@@ -131,7 +145,7 @@ def predict(cfg, o_file):
         F = feature()
         H = encoder(F)
         #preds = mldecoder.greedy(H)
-        preds = mldecoder.greedy(H).cpu().data.numpy()
+        preds = mldecoder.greedy(H)[0].cpu().data.numpy()
         #if cfg.model_type=='INDP':
         #    preds = np.argmax(log_probs.cpu().data.numpy(), axis=2)
 
