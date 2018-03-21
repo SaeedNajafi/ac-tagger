@@ -175,6 +175,7 @@ class RLTrain(nn.Module):
         is_true_tag = torch.eq(taken_actions, tag).float()
         #0/1 reward (hamming loss) for each prediction.
         rewards = is_true_tag * w_mask
+
         #Monte Carlo Returns
         MC_Returns = []
         for i in range(cfg.max_s_len):
@@ -182,7 +183,7 @@ class RLTrain(nn.Module):
             for j in range(1, cfg.max_s_len - i):
                 ret += (l ** j) * rewards[:,i + j].data
             MC_Returns.append(ret)
-	
+
         Returns = torch.stack(MC_Returns, dim=1)
         #Do not back propagate through Returns!
         delta = Variable(Returns, requires_grad=False)
@@ -219,7 +220,7 @@ class RLTrain(nn.Module):
         #Do not back propagate through Returns and V_es!
         delta = Variable(Returns.data - V_es.data, requires_grad=False)
         rlloss = -torch.mean(torch.mean(action_log_policies * (delta) * w_mask, dim=1), dim=0)
-	
+
         vloss = self.V_loss(Returns, V_es)
 
         return rlloss, vloss
