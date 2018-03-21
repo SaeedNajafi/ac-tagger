@@ -26,7 +26,6 @@ feature_optim = None
 encoder_optim = None
 indp_optim = None
 mldecoder_optim = None
-rltrain_optim = None
 critic_optim = None
 
 def batch_to_tensors(cfg, in_B):
@@ -82,7 +81,7 @@ def run_epoch(cfg):
         #log_probs = indp(H)
         log_probs = mldecoder(H)
         mlloss = mldecoder.loss(log_probs)
-        rlloss, vloss = rltrain(H)
+        rlloss, vloss = rltrain(H, mldecoder)
         loss = (1-cfg.a) * mlloss + cfg.a * rlloss
         loss.backward()
         vloss.backward()
@@ -193,13 +192,15 @@ def eval_on_dev(cfg, pred_file):
     return float(correct/total) * 100
 
 def run_model(mode, path, in_file, o_file):
-    global feature, encoder, indp, feature_optim, encoder_optim, indp_optim, mldecoder, mldecoder_optim
+    global rltrain, critic_optim, feature, encoder, indp, feature_optim, encoder_optim, indp_optim, mldecoder, mldecoder_optim
 
     cfg = Configuration()
     #General mode has two values: 'train' or 'test'
     cfg.mode = mode
     cfg.beamsize = 4
-    cfg.rl_type = 'R'
+    cfg.rltrain_type = 'R'
+    cfg.gamma = 0.9
+    cfg.n_step = 4
 
     #Set Random Seeds
     random.seed(cfg.seed)
@@ -219,7 +220,7 @@ def run_model(mode, path, in_file, o_file):
     encoder = Encoder(cfg)
     #indp = INDP(cfg)
     mldecoder = MLDecoder(cfg)
-    rltrain = RLTrain(cfg, mldecoder)
+    rltrain = RLTrain(cfg)
 
     cfg.mldecoder_type = 'TF'
 
