@@ -129,7 +129,6 @@ class RLTrain(nn.Module):
 
             output_dr = self.drop(output)
 
-            #since we are generating a sample
             output_H = torch.cat((output_dr, H_i), dim=1)
             v = self.V(l, output_H)
             V_es.append(v)
@@ -218,7 +217,7 @@ class RLTrain(nn.Module):
 
         Returns = torch.stack(MC_Returns, dim=1)
 
-        #Do not back propagate through Returns!
+        #Do not back propagate through Returns and V_es!
         delta = Variable(Returns.data - V_es.data, requires_grad=False)
         rlloss = action_policies * (delta) * w_mask
 
@@ -250,15 +249,15 @@ class RLTrain(nn.Module):
                     ret += (l ** j) * rewards[:,i + j]
                     if j == n - 1:
                         if i + j + 1 < cfg.max_s_len:
-                            ret += (l ** n) * V_t[i + n]
+                            ret += (l ** n) * V_es[:,i + n]
             TD_Returns.append(ret)
 
         Returns = torch.stack(TD_Returns, dim=1)
 
-        #Do not back propagate through Returns!
+        #Do not back propagate through Returns and V_es!
         delta = Variable(Returns.data - V_es.data, requires_grad=False)
         rlloss = action_policies * (delta) * w_mask
 
         vloss = self.V_loss(Returns, V_es)
-        
+
         return rlloss, vloss
