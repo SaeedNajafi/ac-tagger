@@ -5,6 +5,7 @@ from modules.feature import Feature
 from modules.encoder import Encoder
 from modules.mldecoder import MLDecoder
 from modules.indp import INDP
+from modules.rltrain import RLTrain
 import random
 import re
 import os
@@ -19,10 +20,14 @@ feature = None
 encoder = None
 indp = None
 mldecoder = None
+rtrain = None
+
 feature_optim = None
 encoder_optim = None
 indp_optim = None
 mldecoder_optim = None
+rltrain_optim = None
+critic_optim = None
 
 def batch_to_tensors(cfg, in_B):
     o_B = {}
@@ -53,7 +58,7 @@ def run_epoch(cfg):
     cfg.local_mode = 'train'
 
     total_loss = []
-
+    vtotal_loss = []
     #cfg.sampling_p = 0.6
     #cfg.sampling_bias = 10^3
 
@@ -62,32 +67,46 @@ def run_epoch(cfg):
     encoder.train()
     #indp.train()
     mldecoder.train()
+    rltrain.train()
 
     for step, batch in enumerate(load_data(cfg)):
         feature.zero_grad()
         encoder.zero_grad()
         #indp.zero_grad()
         mldecoder.zero_grad()
+        rltrain.zero_grad()
+
         batch_to_tensors(cfg, batch)
         F = feature()
         H = encoder(F)
         #log_probs = indp(H)
         log_probs = mldecoder(H)
-        loss = mldecoder.loss(log_probs)
+        mlloss = mldecoder.loss(log_probs)
+        rlloss, vloss = rltrain(H)
+        loss = (1-cfg.a) * mlloss + cfg.a * rlloss
         loss.backward()
+        vloss.backward()
         torch.nn.utils.clip_grad_norm(mldecoder.parameters(), cfg.max_gradient_norm)
         torch.nn.utils.clip_grad_norm(encoder.parameters(), cfg.max_gradient_norm)
         torch.nn.utils.clip_grad_norm(feature.parameters(), cfg.max_gradient_norm)
+        #torch.nn.utils.clip_grad_norm(rltrain.parameters(), cfg.max_gradient_norm)
         feature_optim.step()
         encoder_optim.step()
         mldecoder_optim.step()
+        #rltrain_optim.step()
+        critic_optim.step()
+
         loss_value = loss.cpu().data.numpy()[0]
         total_loss.append(loss_value)
+        vloss_value = vloss.cpu().data.numpy()[0]
+        vtotal_loss.append(vloss_value)
         ##
-        sys.stdout.write('\Batch:{} | Loss:{} | Mean Loss:{}'.format(
+        sys.stdout.write('\rBatch:{} | Loss:{} | Mean Loss:{} | VLoss:{} | Mean VLoss:{}'.format(
                                                 step,
                                                 loss_value,
-                                                np.mean(total_loss)
+                                                np.mean(total_loss),
+                                                vloss_value,
+                                                np.mean(vtotal_loss)
                                                 )
                         )
         sys.stdout.flush()
@@ -104,6 +123,7 @@ def predict(cfg, o_file):
     feature.eval()
     encoder.eval()
     mldecoder.eval()
+    rltrain.eval()
 
     #file stream to save predictions
     f = open(o_file, 'w')
@@ -112,7 +132,7 @@ def predict(cfg, o_file):
         F = feature()
         H = encoder(F)
         #preds = mldecoder.greedy(H)
-        preds = mldecoder.beam(H)
+        preds = mldecoder.greedy(H).cpu().data.numpy()
         #if cfg.model_type=='INDP':
         #    preds = np.argmax(log_probs.cpu().data.numpy(), axis=2)
 
@@ -179,6 +199,7 @@ def run_model(mode, path, in_file, o_file):
     #General mode has two values: 'train' or 'test'
     cfg.mode = mode
     cfg.beamsize = 4
+    cfg.rl_type = 'R'
 
     #Set Random Seeds
     random.seed(cfg.seed)
@@ -198,6 +219,7 @@ def run_model(mode, path, in_file, o_file):
     encoder = Encoder(cfg)
     #indp = INDP(cfg)
     mldecoder = MLDecoder(cfg)
+    rltrain = RLTrain(cfg, mldecoder)
 
     cfg.mldecoder_type = 'TF'
 
@@ -205,12 +227,15 @@ def run_model(mode, path, in_file, o_file):
     encoder_optim = optim.Adam(encoder.parameters(), lr=cfg.learning_rate)
     #indp_optim = optim.Adam(indp.parameters(), lr=cfg.learning_rate)
     mldecoder_optim = optim.Adam(mldecoder.parameters(), lr=cfg.learning_rate)
+    #rltrain_optim = optim.Adam(rltrain.parameters(), lr=cfg.learning_rate)
+    critic_optim = optim.Adam(rltrain.parameters(), lr=cfg.learning_rate, weight_decay=0.001)
 
     #Move models to cuda if possible
     if torch.cuda.is_available():
         feature.cuda()
         encoder.cuda()
         mldecoder.cuda()
+        rltrain.cuda()
         #indp.cuda()
 
     if mode=='train':
@@ -218,8 +243,12 @@ def run_model(mode, path, in_file, o_file):
         best_val_cost = float('inf')
         best_val_epoch = 0
         first_start = time.time()
+        feature.load_state_dict(torch.load(path+'model_feature'))
+        encoder.load_state_dict(torch.load(path+'model_encoder'))
+        mldecoder.load_state_dict(torch.load(path+'model_mldecoder'))
         epoch=0
         while (epoch < cfg.max_epochs):
+            cfg.a = np.minimum(1.0, 0.5 + 0.05 * epoch)
             print
             print 'Model:{} | Epoch:{}'.format(cfg.model_type, epoch)
             start = time.time()
@@ -231,10 +260,11 @@ def run_model(mode, path, in_file, o_file):
             if val_cost < best_val_cost:
                 best_val_cost = val_cost
                 best_val_epoch = epoch
-                torch.save(feature.state_dict(), path+'model_feature')
-                torch.save(encoder.state_dict(), path+'model_encoder')
+                torch.save(feature.state_dict(), path+'Rmodel_feature')
+                torch.save(encoder.state_dict(), path+'Rmodel_encoder')
                 #torch.save(indp.state_dict(), path+'model_indp')
-                torch.save(mldecoder.state_dict(), path+'model_mldecoder')
+                torch.save(mldecoder.state_dict(), path+'Rmodel_mldecoder')
+                torch.save(rltrain.state_dict(), path+'Rmodel_rltrain')
 
             #For early stopping
             if epoch - best_val_epoch > cfg.early_stopping:
@@ -247,10 +277,11 @@ def run_model(mode, path, in_file, o_file):
         print 'Total training time:{} seconds'.format(time.time() - first_start)
 
     elif mode=='test':
-        feature.load_state_dict(torch.load(path+'model_feature'))
-        encoder.load_state_dict(torch.load(path+'model_encoder'))
+        feature.load_state_dict(torch.load(path+'Rmodel_feature'))
+        encoder.load_state_dict(torch.load(path+'Rmodel_encoder'))
         #indp.load_state_dict(torch.load(path+'model_indp'))
-        mldecoder.load_state_dict(torch.load(path+'model_mldecoder'))
+        mldecoder.load_state_dict(torch.load(path+'Rmodel_mldecoder'))
+        rltrain.load_state_dict(torch.load(path+'Rmodel_rltrain'))
         print
         print 'Model:{} Predicting'.format(cfg.model_type)
         start = time.time()
