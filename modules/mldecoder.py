@@ -9,7 +9,7 @@ hasCuda = torch.cuda.is_available()
 class MLDecoder(nn.Module):
     """
     This module is for prediction of the tags using a decoder RNN.
-    It has 3 variants:
+    It has 3 variants for ML training:
         1-TF: Teachor Forcing
         2-SS: Scheduled Sampling
         3-DS: Differential Scheduled Sampling
@@ -154,7 +154,6 @@ class MLDecoder(nn.Module):
 
         tag = Variable(cfg.B['tag'].cuda()) if hasCuda else Variable(cfg.B['tag'])
         tag_ems = self.tag_em(tag)
-
 
         #Create a variable for initial hidden vector of RNN.
         zeros = torch.zeros(cfg.d_batch_size, cfg.dec_rnn_units)
@@ -307,8 +306,8 @@ class MLDecoder(nn.Module):
             prev_output = generated_prev_output
 
         log_probs = nn.functional.log_softmax(torch.stack(Scores, dim=1), dim=2)
-        preds = np.argmax(log_probs.cpu().data.numpy(), axis=2)
-        return preds
+        log_p, preds = log_probs.max(dim=2)
+        return preds, log_p
 
     def beam(self, H):
         cfg = self.cfg
@@ -366,15 +365,28 @@ class MLDecoder(nn.Module):
                         tag_c.data[:,beamsize*b + bb] = kidx[:,bb].data
 
                 prev_lprob, maxidx = torch.topk(lprob_c, beamsize, dim=1, largest=True, sorted=True)
+
+                """
+                    which_old_ids is a trick:
+                    For example in beamsize=4, maxidx can take values 0-15.
+                    0-3 means in the previous time step, the tag of beam 0 was fed.
+                    4-7 means in the previous time step, the tag of beam 1 was fed.
+                    8-11 means in the previous time step, the tag of beam 2 was fed.
+                    12-15 means in the previous time step, the tag of beam 3 was fed.
+                    So maxidx//beamsize gives the beam number of previous time step.
+                    Now, in this time step, we are sure which previous tag/beam/hidden was used.
+                    So it should be saved. It is a backpointer saving while going
+                    forward!
+                """
+                which_old_ids = torch.remainder(maxidx, beamsize).long()
                 new_tag = torch.gather(tag_c, 1, maxidx)
-                old_tag = torch.gather(prev_tag, 1, torch.remainder(maxidx, beamsize).long())
+                old_tag = torch.gather(prev_tag, 1, which_old_ids)
                 beam.append(old_tag)
                 prev_tag = new_tag
+                h = torch.gather(h_c, 1, which_old_ids.view(-1, beamsize, 1).expand(-1, beamsize, cfg.dec_rnn_units))
 
-                mmaxidx = torch.remainder(maxidx, beamsize).long()
-                h = torch.gather(h_c, 1, mmaxidx.view(-1, beamsize, 1).expand(-1, beamsize, cfg.dec_rnn_units))
 
         beam.append(new_tag)
-        bm = torch.stack(beam, dim=2)
-        preds = bm[:,0,:].cpu().data.numpy()
+        preds = torch.stack(beam, dim=2)
+        #!!Returning indivitual log probs is not implemented.!!
         return preds

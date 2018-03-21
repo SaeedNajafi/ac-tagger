@@ -49,5 +49,5 @@ class INDP(nn.Module):
 
     def predict(self, H):
         log_probs = self.forward(H)
-        preds = np.argmax(log_probs.cpu().data.numpy(), axis=2)
-        return preds
+        log_p, preds = log_probs.max(dim=2)
+        return preds, log_p

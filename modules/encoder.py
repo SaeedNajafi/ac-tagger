@@ -16,7 +16,7 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
 
         self.cfg = cfg
-
+        
         #Size of input feature vectors
         in_size = cfg.w_em_size + 2 * cfg.ch_rnn_units + cfg.cap_em_size
         self.w_rnn = nn.GRU(
