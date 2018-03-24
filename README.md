@@ -3,6 +3,7 @@
 
 ## Requirements
 ``Python 2.7`` and ``PyTorch`` (http://pytorch.org/).
+
 The model is implemented and tested on PyTorch version 0.3.1 (http://pytorch.org/docs/0.3.1/).
 
 ### Hardware Requirements
@@ -10,11 +11,14 @@ The model is fast on a GPU unit with CUDA + cuDNN deep learning libraries.
 
 ### Data Requirements
 First you need to obtain word embeddings.
+
 For English, we use 100-dimensions Glove embeddings (https://nlp.stanford.edu/projects/glove/).
+
 The preprocessed version of the embeddings can be downloaded from the following link:
 https://goo.gl/8D87oP
 
 For German, we obtain and utilize the 64-dimensions German embeddings of https://arxiv.org/abs/1603.01360.
+
 The preprocessed version of the embeddings can be downloaded from the following link:
 https://goo.gl/U8dQAJ
 
