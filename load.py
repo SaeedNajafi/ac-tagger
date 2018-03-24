@@ -50,7 +50,7 @@ def load_embeddings(cfg):
                 chars.append(ch)
 
     #Pad should be the last.
-    cfg.ch_pad = '@'
+    cfg.ch_pad = '§'
     chars.append(cfg.ch_pad)
 
     cfg.ch_size = len(chars)
@@ -96,79 +96,6 @@ def load_embeddings(cfg):
 
     return
 
-#Utility for NER
-#https://github.com/glample/tagger/blob/master/utils.py
-def iobes_iob(tags):
-    """
-    IOBES -> IOB
-    """
-    new_tags = []
-    for i, tag in enumerate(tags):
-        if tag.split('-')[0] == 'B':
-            new_tags.append(tag)
-        elif tag.split('-')[0] == 'I':
-            new_tags.append(tag)
-        elif tag.split('-')[0] == 'S':
-            new_tags.append(tag.replace('S-', 'B-'))
-        elif tag.split('-')[0] == 'E':
-            new_tags.append(tag.replace('E-', 'I-'))
-        elif tag.split('-')[0] == 'O':
-            new_tags.append(tag)
-        else:
-            raise Exception('Invalid format!')
-    return new_tags
-
-#Utility for NER
-#https://github.com/glample/tagger/blob/master/utils.py
-def iob_iobes(tags):
-    """
-    IOB -> IOBES
-    """
-    new_tags = []
-    for i, tag in enumerate(tags):
-        if tag == 'O':
-            new_tags.append(tag)
-        elif tag.split('-')[0] == 'B':
-            if i + 1 != len(tags) and \
-               tags[i + 1].split('-')[0] == 'I':
-                new_tags.append(tag)
-            else:
-                new_tags.append(tag.replace('B-', 'S-'))
-        elif tag.split('-')[0] == 'I':
-            if i + 1 < len(tags) and \
-                    tags[i + 1].split('-')[0] == 'I':
-                new_tags.append(tag)
-            else:
-                new_tags.append(tag.replace('I-', 'E-'))
-        else:
-            raise Exception('Invalid IOB format!')
-    return new_tags
-
-#Utility for NER
-#https://github.com/glample/tagger/blob/master/utils.py
-def iob2(tags):
-    """
-    Check that tags have a valid IOB format.
-    Tags in IOB1 format are converted to IOB2.
-    """
-    for i, tag in enumerate(tags):
-        if tag == 'O':
-            continue
-        split = tag.split('-')
-        if len(split) != 2 or split[0] not in ['I', 'B']:
-            return False
-        if split[0] == 'B':
-            continue
-        elif i == 0 or tags[i - 1] == 'O':  # conversion IOB1 to IOB2
-            tags[i] = 'B' + tag[1:]
-        elif tags[i - 1][1:] == tag[1:]:
-            continue
-        else:  # conversion IOB1 to IOB2
-            tags[i] = 'B' + tag[1:]
-    return True
-
-#Utility for NER
-#https://github.com/glample/tagger/blob/master/loader.py
 def capalize_word(word):
     """
         Capitalization feature:
@@ -302,12 +229,14 @@ def process_batch(cfg, batch):
     hasY = True
     if mode=='test': hasY = False
 
+    Raw_Words = []
     Word_Ids = []
     Cap_Ids = []
     Word_to_Chars = {}
     Tag_Ids = []
     S_Lens = []
 
+    raw_words = []
     word_ids = []
     cap_ids = []
     tag_ids = []
@@ -317,6 +246,7 @@ def process_batch(cfg, batch):
 
         for x in X:
             word = x
+            raw_words.append(word)
             word_id = process_word(cfg, word)
             word_ids.append(word_id)
             if word_id not in Word_to_Chars:
@@ -324,17 +254,22 @@ def process_batch(cfg, batch):
             cap_ids.append(capalize_word(word))
 
         #finished one sentence, now add inner lists to parent lists.
+        Raw_Words.append(raw_words)
         Word_Ids.append(word_ids)
         Cap_Ids.append(cap_ids)
         S_Lens.append(len(X))
 
         #Reset inner lists for the next sentence.
+        raw_words = []
         word_ids = []
         cap_ids = []
 
         #Y is the tags sequence for the sentence X.
         for y in Y:
-            tag = y
+            if len(y.split('\t'))>1:
+                tag = y.split('\t')[0]
+            else:
+                tag = y
             tag_ids.append(process_tag(cfg, tag))
 
         Tag_Ids.append(tag_ids)
@@ -387,7 +322,8 @@ def process_batch(cfg, batch):
         'w': Word_Ids,
         'w_mask': W_Mask,
         'w_cap': Cap_Ids,
-        's_len': S_Lens
+        's_len': S_Lens,
+        'raw_w': Raw_Words
         }
 
     if hasY:
@@ -407,6 +343,11 @@ def pad(cfg, B):
     #Pad w with w_pad_id
     for sentence in B['w']:
         pad_lst = [cfg.w_pad_id] * (cfg.max_s_len-len(sentence))
+        sentence.extend(pad_lst)
+
+    #Pad w with w_pad
+    for sentence in B['raw_w']:
+        pad_lst = [cfg.w_pad] * (cfg.max_s_len-len(sentence))
         sentence.extend(pad_lst)
 
     #Pad w_cap with cap_pad_id
