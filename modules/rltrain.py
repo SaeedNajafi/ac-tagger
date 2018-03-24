@@ -198,7 +198,7 @@ class RLTrain(nn.Module):
         else:
             deltas = Variable(biased_advantages, requires_grad=False)
 
-        rlloss = -torch.mean(torch.mean(action_log_policies * (deltas) * w_mask, dim=1), dim=0)
+        rlloss = -torch.mean(torch.mean(action_log_policies * deltas * w_mask, dim=1), dim=0)
         vloss = self.V_loss(Returns, V_es)
         return rlloss, vloss
 
@@ -207,43 +207,60 @@ class RLTrain(nn.Module):
         l = cfg.gamma
         n = cfg.n_step
 
+        #Building gamma matrix to calculate return for each step.
+        powers = np.arange(cfg.max_s_len)
+        bases = np.full((1,cfg.max_s_len), l)
+        rows = np.power(bases, powers)
+        inverse_rows = 1.0/rows
+        inverse_cols = inverse_rows.reshape((cfg.max_s_len,1))
+        gammaM = np.tril(np.triu(np.multiply(inverse_cols, rows)), k=n-1)
+        gM_tensor = torch.from_numpy(gammaM.T).float()
+
+        """
+            for n = 3, gamma=0.9
+            gM_tensor:
+
+            array(
+                    [[1.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0. ],
+                    [0.9 , 1.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ],
+                    [0.81, 0.9 , 1.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ],
+                    [0.  , 0.81, 0.9 , 1.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  ],
+                    [0.  , 0.  , 0.81, 0.9 , 1.  , 0.  , 0.  , 0.  , 0.  , 0.  ],
+                    [0.  , 0.  , 0.  , 0.81, 0.9 , 1.  , 0.  , 0.  , 0.  , 0.  ],
+                    [0.  , 0.  , 0.  , 0.  , 0.81, 0.9 , 1.  , 0.  , 0.  , 0.  ],
+                    [0.  , 0.  , 0.  , 0.  , 0.  , 0.81, 0.9 , 1.  , 0.  , 0.  ],
+                    [0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.81, 0.9 , 1.  , 0.  ],
+                    [0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.  , 0.81, 0.9 , 1.  ]
+                    ])
+        """
+
+        if hasCuda:
+            gM = Variable(gM_tensor.cuda(), requires_grad=False)
+        else:
+            gM = Variable(gM_tensor, requires_grad=False)
+
         tag = Variable(cfg.B['tag'].cuda()) if hasCuda else Variable(cfg.B['tag'])
         w_mask = Variable(cfg.B['w_mask'].cuda()) if hasCuda else Variable(cfg.B['w_mask'])
 
-        is_true_tag = torch.eq(taken_actions, tag).float()
+        is_true_tag = torch.eq(taken_actions, tag)
         #0/1 reward (hamming loss) for each prediction.
-        rewards = is_true_tag * w_mask
-
+        rewards = is_true_tag.float() * w_mask
         V_es = V_es * w_mask
+        Returns = torch.matmul(rewards, gM)
+        for i in range(cfg.max_s_len-n):
+            Returns[:,i] = (l ** n) * V_es[:, i + n]
 
-        #Temporal Difference Returns
-        TD_Returns = []
-        zeros = torch.zeros(cfg.d_batch_size,)
-        zeros = Variable(zeros.cuda()) if hasCuda else Variable(zeros)
-        for i in range(cfg.max_s_len):
-            ret = zeros
-            for j in range(n):
-                if i + j < cfg.max_s_len:
-                    ret += (l ** j) * rewards[:,i + j]
-                    if j == n - 1:
-                        if i + j + 1 < cfg.max_s_len:
-                            ret += (l ** n) * V_es[:,i + n]
-            TD_Returns.append(ret)
-
-        Returns = torch.stack(TD_Returns, dim=1)
+        advantages = Returns - V_es.data
+        pos_neq = torch.ge(advantages, 0.0).float()
+        signs = torch.eq(pos_neq, rewards.data).float()
 
         #Do not back propagate through Returns and V_es!
-        delta = Variable(Returns.data - V_es.data, requires_grad=False)
-        rlloss = -torch.mean(torch.mean(action_log_policies * (delta) * w_mask, dim=1), dim=0)
+        biased_advantages = signs * advantages
+        if hasCuda:
+            deltas = Variable(biased_advantages.cuda(), requires_grad=False)
+        else:
+            deltas = Variable(biased_advantages, requires_grad=False)
+
+        rlloss = -torch.mean(torch.mean(action_log_policies * deltas * w_mask, dim=1), dim=0)
         vloss = self.V_loss(Returns, V_es)
-
         return rlloss, vloss
-
-
-
-#        MC_Returns = []
-#        ret = 0.0
-#        for i in reversed(range(cfg.max_s_len)):
-#            ret = rewards[:,i].data + l * ret
-#            MC_Returns.append(ret)
-#            Returns = torch.stack(MC_Returns[::-1], dim=1)
