@@ -390,6 +390,6 @@ class MLDecoder(nn.Module):
 
         beam.append(new_tag)
         preds = torch.stack(beam, dim=2)
-        #!!Returning indivitual log probs is not implemented.!!
+        #!!Returning individual log probs is not implemented.!!
         #preds is of size (batch size, beam size, max length)
         return preds, None
