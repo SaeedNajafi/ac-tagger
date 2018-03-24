@@ -15,20 +15,22 @@ class RLTrain(nn.Module):
         2- 'AC': Actor-critic
     """
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, mldecoder):
         super(RLTrain, self).__init__()
 
         self.cfg = cfg
+        self.mldecoder = mldecoder
 
         #Critic:
         self.cr_size = cfg.w_rnn_units + cfg.dec_rnn_units
+
         self.layer1 = nn.Linear(
                             self.cr_size,
                             self.cr_size,
                             bias=True
                             )
 
-	self.layer2 = nn.Linear(
+        self.layer2 = nn.Linear(
                             self.cr_size,
                             self.cr_size,
                             bias=True
@@ -39,10 +41,9 @@ class RLTrain(nn.Module):
                             1,
                             bias=True
                             )
-
-        self.drop = nn.Dropout(cfg.dropout)
-
         self.param_init()
+        self.opt = optim.SGD(mldecoder.parameters(), lr=cfg.learning_rate)
+        self.critic_opt = optim.Adam(self.parameters(), lr=cfg.learning_rate, weight_decay=0.001)
         return
 
     def param_init(self):
@@ -54,33 +55,27 @@ class RLTrain(nn.Module):
         return
 
     #Critic approximates the state-value function of a state.
-    def V(self, l, S):
+    def V(self, S):
         #Do not back propagate through S!
-        in_S = Variable(S.data, requires_grad=False)
-	cfg = self.cfg
-	#powers = np.arange(cfg.max_s_len)
-	#bases = np.full((1,cfg.max_s_len), l)
-	#rows = np.power(bases, powers)
-	#inverse_rows = 1.0/rows
-	#inverse_cols = inverse_rows.reshape((cfg.max_s_len,1))
-	#gammaM = np.triu(np.multiply(inverse_cols, rows)).T
-	#gM_tensor = torch.from_numpy(gammaM)
-	#gM = Variable(gM_tensor.cuda(), requires_grad=False) if hasCuda else Variable(gM_tensor, requires_grad=False)
+        in_S = Variable(S.data.cuda(), requires_grad=False) if hasCuda else Variable(S.data, requires_grad=False)
+
+        cfg = self.cfg
+        l = cfg.gamma
+        if l>=1 or l<0:
+            print "INFO: 0 <= discount factor < 1 !"
+            exit()
 
         #We do not apply any dropout layer as this is a regression model
         #and the optimizer will apply L2 regularization on the weights.
-	H1 = nn.functional.leaky_relu(self.layer1(in_S))
-	H2 = nn.functional.leaky_relu(self.layer2(H1))	
+        H1 = nn.functional.leaky_relu(self.layer1(in_S))
+        H2 = nn.functional.leaky_relu(self.layer2(H1))
         H3 = nn.functional.sigmoid(self.layer3(H2))
         #H3 is now scaler between 0 and 1
-	#R = H3.view(cfg.d_batch_size, cfg.max_s_len)
+
         v = torch.div(H3, 1.0-l)
         #v is now scaler between 0 and 1.0-l which are the boundries for returns w.r.t. l and 0/1 rewards.
-	#gM_dr = self.drop(gM)
-	#v = torch.matmul(R.double(), gM).float()
-	#print R[0]
-	#print "saeed"
-	return v
+
+        return v.view(cfg.d_batch_size, cfg.max_s_len)
 
     #least square loss for V.
     #L2 regularization will be done by optimizer.
@@ -89,33 +84,26 @@ class RLTrain(nn.Module):
             Returns are the temporal difference or monte carlo returns calculated for
             each step. They are the target regression values for the Critic V.
             prev_V is the previous estimates of the Critic V for the returns.
-            We wanna minimize the Mean Squared Error between Returns and prev_V.
+            We want to minimize the Mean Squared Error between Returns and prev_V.
         """
-	cfg = self.cfg
+        cfg = self.cfg
         #Do not back propagate through Returns!
-        in_Returns = Variable(Returns, requires_grad=False)
+        in_Returns = Variable(Returns.cuda(), requires_grad=False) if hasCuda else Variable(Returns, requires_grad=False)
 
-	#mask pads
+        #mask pads
         w_mask = Variable(cfg.B['w_mask'].cuda()) if hasCuda else Variable(cfg.B['w_mask'])
 
         #No negative, this is MSE loss
-        MSEloss = torch.mean(torch.mean(torch.pow((prev_V-in_Returns) * w_mask, 2.0), dim=1), dim=0)
+        MSEloss = torch.mean(torch.mean(torch.pow(prev_V-in_Returns, 2.0) * w_mask, dim=1), dim=0)
 
         #MSEloss will be plugged in a separate optimizer.
         return MSEloss
 
-    def forward(self, H, mldecoder):
+    def forward(self, H):
         cfg = self.cfg
-        dec_rnn = mldecoder.dec_rnn
-        affine = mldecoder.affine
-        tag_em = mldecoder.tag_em
-        #Discount factor gamma
-        l = cfg.gamma
-        if l>=1 or l<0:
-            print "INFO: 0 <= discount factor < 1 !"
-            exit()
-
-        #Actor should generate sample sequence from the model.
+        dec_rnn = self.mldecoder.dec_rnn
+        affine = self.mldecoder.affine
+        tag_em = self.mldecoder.tag_em
 
         #zero the pad vector
         tag_em.weight.data[cfg.tag_pad_id].fill_(0.0)
@@ -129,7 +117,7 @@ class RLTrain(nn.Module):
         Go_symbol = Variable(zeros.cuda()) if hasCuda else Variable(zeros)
 
         #critic V estimates
-	states = []
+        states = []
         taken_actions = []
         action_log_policies = []
         for i in range(cfg.max_s_len):
@@ -156,18 +144,14 @@ class RLTrain(nn.Module):
             taken_actions.append(gen_idx)
             action_log_policies.append(log_p)
 
-	S = torch.stack(states, dim=1)
-	V_es = self.V(l, S).view(cfg.d_batch_size, cfg.max_s_len)
-        #V_es = torch.stack(V_es, dim=1).view(cfg.d_batch_size, cfg.max_s_len)
+        S = torch.stack(states, dim=1)
+        V_es = self.V(S)
         taken_actions = torch.stack(taken_actions, dim=1)
         action_log_policies = torch.stack(action_log_policies, dim=1)
 
         type = cfg.rltrain_type
-        if type=='R':
+        if type=='BR':
             return self.REINFORCE(V_es, taken_actions, action_log_policies)
-
-        elif type=='BR':
-            return self.B_REINFORCE(V_es, taken_actions, action_log_policies), S
 
         elif type=='AC':
             return self.Actor_Critic(V_es, taken_actions, action_log_policies)
@@ -182,57 +166,41 @@ class RLTrain(nn.Module):
         cfg = self.cfg
         l = cfg.gamma
 
-        tag = Variable(cfg.B['tag'].cuda()) if hasCuda else Variable(cfg.B['tag'])
-        w_mask = Variable(cfg.B['w_mask'].cuda()) if hasCuda else Variable(cfg.B['w_mask'])
-        is_true_tag = torch.eq(taken_actions, tag).float()
-        #0/1 reward (hamming loss) for each prediction.
-        rewards = is_true_tag * w_mask
-	neq_r = 2 * rewards - 1
-        #Monte Carlo Returns
-        MC_Returns = []
-	ret = 0.0
-        for i in reversed(range(cfg.max_s_len)):
-            ret = rewards[:,i].data + l * ret
-            MC_Returns.append(ret)
-
-        Returns = torch.stack(MC_Returns[::-1], dim=1)
-        #Do not back propagate through Returns!
-        delta = Variable(Returns * neq_r.data, requires_grad=False)
-        rlloss = -torch.mean(torch.mean(action_log_policies * (delta) * w_mask, dim=1), dim=0)
-
-        #the none is for critic loss, we do not train critic in basic REINFORCE.
-        return rlloss, None
-
-    def B_REINFORCE(self, V_es, taken_actions, action_log_policies):
-        cfg = self.cfg
-        l = cfg.gamma
+        #Building gamma matrix to calculate return for each step.
+        powers = np.arange(cfg.max_s_len)
+        bases = np.full((1,cfg.max_s_len), l)
+        rows = np.power(bases, powers)
+        inverse_rows = 1.0/rows
+        inverse_cols = inverse_rows.reshape((cfg.max_s_len,1))
+        gammaM = np.triu(np.multiply(inverse_cols, rows))
+        gM_tensor = torch.from_numpy(gammaM.T).float()
+        if hasCuda:
+            gM = Variable(gM_tensor.cuda(), requires_grad=False)
+        else:
+            gM = Variable(gM_tensor, requires_grad=False)
 
         tag = Variable(cfg.B['tag'].cuda()) if hasCuda else Variable(cfg.B['tag'])
         w_mask = Variable(cfg.B['w_mask'].cuda()) if hasCuda else Variable(cfg.B['w_mask'])
 
-        is_true_tag = torch.eq(taken_actions, tag).float()
+        is_true_tag = torch.eq(taken_actions, tag)
         #0/1 reward (hamming loss) for each prediction.
-        rewards = is_true_tag * w_mask
-	#print rewards[0]
+        rewards = is_true_tag.float() * w_mask
         V_es = V_es * w_mask
-	print rewards[0]
-	MC_Returns = []
-        ret = 0.0
-        for i in reversed(range(cfg.max_s_len)):
-            ret = rewards[:,i].data + l * ret
-            MC_Returns.append(ret)
+        Returns = torch.matmul(rewards, gM)
+        advantages = Returns - V_es.data
+        pos_neq = torch.ge(advantages, 0.0).float()
+        signs = torch.eq(pos_neq, rewards.data).float()
 
-        Returns = torch.stack(MC_Returns[::-1], dim=1)
         #Do not back propagate through Returns and V_es!
-	d = Returns - V_es.data
-	sign = torch.eq(torch.ge(d, 0.0).float(), rewards.data).float()
-	delta = Variable(sign * d, requires_grad=False)
-	print delta[0]
-	print d[0]
-        rlloss = -torch.mean(torch.mean(action_log_policies * (delta) * w_mask, dim=1), dim=0)
-        vloss = self.V_loss(Returns, V_es)
+        biased_advantages = signs * advantages
+        if hasCuda:
+            deltas = Variable(biased_advantages.cuda(), requires_grad=False)
+        else:
+            deltas = Variable(biased_advantages, requires_grad=False)
 
-        return rlloss, vloss, Returns
+        rlloss = -torch.mean(torch.mean(action_log_policies * (deltas) * w_mask, dim=1), dim=0)
+        vloss = self.V_loss(Returns, V_es)
+        return rlloss, vloss
 
     def Actor_Critic(self, V_es, taken_actions, action_log_policies):
         cfg = self.cfg
@@ -270,3 +238,12 @@ class RLTrain(nn.Module):
         vloss = self.V_loss(Returns, V_es)
 
         return rlloss, vloss
+
+
+
+#        MC_Returns = []
+#        ret = 0.0
+#        for i in reversed(range(cfg.max_s_len)):
+#            ret = rewards[:,i].data + l * ret
+#            MC_Returns.append(ret)
+#            Returns = torch.stack(MC_Returns[::-1], dim=1)

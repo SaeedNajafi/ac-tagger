@@ -3,6 +3,7 @@ import numpy as np
 import torch.nn as nn
 from torch.nn import init
 from torch.autograd import Variable
+import torch.optim as optim
 
 hasCuda = torch.cuda.is_available()
 
@@ -22,6 +23,7 @@ class INDP(nn.Module):
                             bias=True
                             )
         self.param_init()
+        self.opt = optim.Adam(self.parameters(), lr=cfg.learning_rate)
         return
 
     def param_init(self):

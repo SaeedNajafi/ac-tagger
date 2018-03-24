@@ -3,6 +3,7 @@ import numpy as np
 import torch.nn as nn
 from torch.nn import init
 from torch.autograd import Variable
+import torch.optim as optim
 
 hasCuda = torch.cuda.is_available()
 
@@ -39,6 +40,7 @@ class MLDecoder(nn.Module):
 
         self.param_init()
         self.embeddings()
+        self.opt = optim.Adam(self.parameters(), lr=cfg.learning_rate)
         return
 
     def param_init(self):
@@ -201,7 +203,7 @@ class MLDecoder(nn.Module):
 
         #We feed the probability-weighted average of all tag embeddings biased strongly
         #towards the greedily generated tag.
-        bias = cfg.sampling_bias
+        bias = cfg.greedy_bias
 
         flip_coin = torch.rand(cfg.d_batch_size, cfg.max_s_len)
 
@@ -389,4 +391,5 @@ class MLDecoder(nn.Module):
         beam.append(new_tag)
         preds = torch.stack(beam, dim=2)
         #!!Returning indivitual log probs is not implemented.!!
-        return preds
+        #preds is of size (batch size, beam size, max length)
+        return preds, None

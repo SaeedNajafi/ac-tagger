@@ -2,6 +2,7 @@ import torch
 from torch.autograd import Variable
 import torch.nn as nn
 from torch.nn import init
+import torch.optim as optim
 
 hasCuda = torch.cuda.is_available()
 
@@ -16,7 +17,7 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
 
         self.cfg = cfg
-        
+
         #Size of input feature vectors
         in_size = cfg.w_em_size + 2 * cfg.ch_rnn_units + cfg.cap_em_size
         self.w_rnn = nn.GRU(
@@ -38,6 +39,7 @@ class Encoder(nn.Module):
         self.drop = nn.Dropout(cfg.dropout)
 
         self.param_init()
+        self.opt = optim.Adam(self.parameters(), lr=cfg.learning_rate)
         return
 
     def param_init(self):
@@ -82,8 +84,8 @@ class Encoder(nn.Module):
 
         HH = self.dense(outputs_dr_masked)
 
-        #tanh non-linear layer.
-        H = nn.functional.tanh(HH)
+        #relu non-linear layer.
+        H = nn.functional.relu(HH)
 
         mask_expanded = mask.expand(cfg.d_batch_size, cfg.max_s_len, cfg.w_rnn_units)
         #H is the final matrix having final hidden vectors of steps.
