@@ -3,16 +3,16 @@ import numpy as np
 import torch.nn as nn
 from torch.nn import init
 from torch.autograd import Variable
+import torch.optim as optim
 
 hasCuda = torch.cuda.is_available()
 
 class RLTrain(nn.Module):
     """
     This module applies RL training to the decoder RNN.
-    It has 3 variants:
-        1- 'R': Reinforce
-        2- 'BR': Reinforce with baseline
-        3- 'AC': Actor-critic
+    It has 2 variants:
+        1- 'R': Reinforce with baseline
+        2- 'AC': Actor-critic
     """
 
     def __init__(self, cfg):
