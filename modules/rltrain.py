@@ -248,7 +248,7 @@ class RLTrain(nn.Module):
         V_es = V_es * w_mask
         Returns = torch.matmul(rewards, gM)
         for i in range(cfg.max_s_len-n):
-            Returns[:,i] = (l ** n) * V_es[:, i + n]
+            Returns[:,i] += (l ** n) * V_es[:, i + n]
 
         advantages = Returns - V_es.data
         pos_neq = torch.ge(advantages, 0.0).float()
