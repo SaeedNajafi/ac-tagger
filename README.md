@@ -14,6 +14,10 @@ For English, we use 100-dimensions Glove embeddings (https://nlp.stanford.edu/pr
 The preprocessed version of the embeddings can be downloaded from the following link:
 https://goo.gl/8D87oP
 
+For German, we obtain and utilize the 64-dimensions German embeddings of https://arxiv.org/abs/1603.01360.
+The preprocessed version of the embeddings can be downloaded from the following link:
+https://goo.gl/U8dQAJ
+
 ## Training Instructions
 ```python tagger.py train <path to save model>```
 
