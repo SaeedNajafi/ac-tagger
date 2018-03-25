@@ -22,6 +22,10 @@ For German, we obtain and utilize the 64-dimensions German embeddings of https:/
 The preprocessed version of the embeddings can be downloaded from the following link:
 https://goo.gl/U8dQAJ
 
+
+## Running Configurations
+All configurations are manually set via the ``config.py`` file.
+
 ## Training Instructions
 ```python tagger.py train <path to save model>```
 

@@ -6,28 +6,12 @@ class Configuration(object):
     tag_em_size = 128
     dec_rnn_units = 512
     dropout = 0.5
-    learning_rate = 0.0005
+    learning_rate = 0.005
     max_gradient_norm = 5.
     max_epochs = 128
     early_stopping = 10
-
-    #Default
     batch_size = 32
     seed = 1234
-
-    model_type = 'INDP'
-    #model_type = 'RNN'
-    #model_type = 'CRF'
-    #model_type = 'S-RNN'
-    #model_type = 'DS-RNN'
-    #model_type = 'AC-RNN'
-    #model_type = 'R-RNN'
-    #model_type = 'BR-RNN'
-
-    #search = greedy
-    #search = beam
-    #search = viterbi
-    #beamsize = 12
 
     """path to different files"""
     w_dic = './en_embeddings/' + 'glove.100.dic.txt'
@@ -38,3 +22,40 @@ class Configuration(object):
     train_ref = './en_ccg_data/' + 'ccg.train.ref'
     dev_raw = './en_ccg_data/' + 'ccg.dev.raw'
     dev_ref = './en_ccg_data/' + 'ccg.dev.ref'
+
+
+    """ Model Type """
+    #Independent prediction of the tags.
+    #model_type = 'INDP'
+
+    #Conditional Random Field
+    #model_type = 'CRF'
+
+    #Decoder RNN trained only with teacher forcing
+    #model_type = 'TF-RNN'
+
+    #Decoder RNN trained with scheduled sampling.
+    #model_type = 'SS-RNN'
+
+    #Decoder RNN trained with differential scheduled sampling.
+    #model_type = 'DS-RNN'
+
+    #Also specify k for decaying the sampling probability in inverse sigmoid schedule.
+    #Only for 'SS-RNN' and 'DS-RNN'
+    #k=25
+
+    #Decoder RNN trained using REINFORCE with baseline.
+    #model_type = 'BR-RNN'
+
+    #Decoder RNN trained with Actor-Critic.
+    #model_type = 'AC-RNN'
+
+    #For RL, you need to specify gamma and n-step.
+    #gamma = 0.9
+    #n_step = 4
+
+    #For inference in decoder RNNs, we have greedy search or beam search.
+    #Specify the beam size.
+    #search = 'greedy'
+    #search = 'beam'
+    #beamsize = 10
