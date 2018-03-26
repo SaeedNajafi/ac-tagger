@@ -13,21 +13,16 @@ import sys
 import time
 import numpy as np
 import torch
-import torch.optim as optim
-from torch.autograd import Variable
 
-#Global variables for models and the optimizers.
+hasCuda = torch.cuda.is_available()
+
+#Global variables for models.
 feature = None
 encoder = None
 indp = None
+crf = None
 mldecoder = None
-rtrain = None
-
-feature_optim = None
-encoder_optim = None
-indp_optim = None
-mldecoder_optim = None
-critic_optim = None
+rltrain = None
 
 def batch_to_tensors(cfg, in_B):
     o_B = {}
@@ -54,97 +49,6 @@ def batch_to_tensors(cfg, in_B):
     cfg.B = o_B
     return
 
-def run_epoch(cfg):
-    cfg.local_mode = 'train'
-    if torch.cuda.is_available():
-    	a = Variable(torch.FloatTensor(np.atleast_1d(cfg.a)).cuda())
-    else:
-        a = Variable(torch.FloatTensor(np.atleast_1d(cfg.a)))
-    total_loss = []
-    vtotal_loss = []
-    #cfg.sampling_p = 0.6
-    #cfg.sampling_bias = 10^3
-
-    #Turn on training mode which enables dropout.
-    feature.train()
-    encoder.train()
-    #indp.train()
-    mldecoder.train()
-    rltrain.train()
-
-    for step, batch in enumerate(load_data(cfg)):
-        feature.zero_grad()
-        encoder.zero_grad()
-        #indp.zero_grad()
-        mldecoder.zero_grad()
-        rltrain.zero_grad()
-
-        batch_to_tensors(cfg, batch)
-        F = feature()
-        H = encoder(F)
-        #log_probs = indp(H)
-        log_probs = mldecoder(H)
-        #mlloss = mldecoder.loss(log_probs)
-        rlloss, vloss = rltrain(H, mldecoder)
-        loss = rlloss
-        loss.backward()
-        #vloss.backward()
-        torch.nn.utils.clip_grad_norm(mldecoder.parameters(), cfg.max_gradient_norm)
-        torch.nn.utils.clip_grad_norm(encoder.parameters(), cfg.max_gradient_norm)
-        torch.nn.utils.clip_grad_norm(feature.parameters(), cfg.max_gradient_norm)
-        #torch.nn.utils.clip_grad_norm(rltrain.parameters(), cfg.max_gradient_norm)
-        feature_optim.step()
-        encoder_optim.step()
-        mldecoder_optim.step()
-        #rltrain_optim.step()
-        critic_optim.step()
-
-        loss_value = loss.cpu().data.numpy()[0]
-        total_loss.append(loss_value)
-        #vloss_value = vloss.cpu().data.numpy()[0]
-        vloss_value = 0
-        vtotal_loss.append(vloss_value)
-        ##
-        sys.stdout.write('\rBatch:{} | Loss:{} | Mean Loss:{} | VLoss:{} | Mean VLoss:{}'.format(
-                                                step,
-                                                loss_value,
-                                                np.mean(total_loss),
-                                                vloss_value,
-                                                np.mean(vtotal_loss)
-                                                )
-                        )
-        sys.stdout.flush()
-    return
-
-def predict(cfg, o_file):
-    if cfg.mode=='train':
-        cfg.local_mode = 'dev'
-
-    elif cfg.mode=='test':
-        cfg.local_mode = 'test'
-
-    #Turn on evaluation mode which disables dropout.
-    feature.eval()
-    encoder.eval()
-    mldecoder.eval()
-    rltrain.eval()
-
-    #file stream to save predictions
-    f = open(o_file, 'w')
-    for batch in load_data(cfg):
-        batch_to_tensors(cfg, batch)
-        F = feature()
-        H = encoder(F)
-        #preds = mldecoder.greedy(H)
-        preds = mldecoder.greedy(H)[0].cpu().data.numpy()
-        #if cfg.model_type=='INDP':
-        #    preds = np.argmax(log_probs.cpu().data.numpy(), axis=2)
-
-        save_predictions(cfg, batch, preds, f)
-
-    f.close()
-    return
-
 def save_predictions(cfg, batch, preds, f):
     """Saves predictions to the provided file stream."""
     #Sentence index
@@ -154,13 +58,12 @@ def save_predictions(cfg, batch, preds, f):
         w_idx = 0
         while(w_idx < batch['s_len'][s_idx]):
             #w is the word for which we predict a tag
-            w = batch['w'][s_idx][w_idx]
-            str_w = cfg.data['id_w'][w]
+            w = batch['raw_w'][s_idx][w_idx]
 
             #tag is the predicted tag for w
-            tag = pred[w_idx]
-            str_tag = cfg.data['id_tag'][tag]
-            f.write(str_w + '\t' + str_tag + '\n')
+            tag_id = pred[w_idx]
+            str_tag = cfg.data['id_tag'][tag_id]
+            f.write(w + '\t' + str_tag + '\n')
 
             #Go to the next word in the sentence
             w_idx += 1
@@ -171,13 +74,16 @@ def save_predictions(cfg, batch, preds, f):
 
     return
 
-def eval_on_dev(cfg, pred_file):
-    #accuracy
-    ref_lines = open(cfg.dev_ref, 'r').readlines()
+#Used to evaluate model's performance on the dev set w.r.t. top1 tagging accuracy.
+#Notice, we do not use F1-score for NER.
+#Universilay we use accuracy for POS/CCG/NER.
+def accuracy(ref_file, pred_file):
+    #Top1 Accuracy
+    ref_lines = open(ref_file, 'r').readlines()
     pred_lines = open(pred_file, 'r').readlines()
 
     if len(ref_lines)!=len(pred_lines):
-        print "INFO: Wrong number of lines in reference and prediction files for dev set."
+        print "INFO: Wrong number of lines in reference and prediction files".
         exit()
 
     total = 0.0
@@ -196,22 +102,147 @@ def eval_on_dev(cfg, pred_file):
 
     return float(correct/total) * 100
 
+def run_epoch(cfg):
+    cfg.local_mode = 'train'
+
+    total_loss = []
+    if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
+        vtotal_loss = []
+
+    #Turn on training mode which enables dropout.
+    feature.train()
+    encoder.train()
+    if cfg.model_type=='INDP': indp.train()
+    if cfg.model_type=='CRF': crf.train()
+    else:
+        mldecoder.train()
+        if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
+            rltrain.train()
+
+    for step, batch in enumerate(load_data(cfg)):
+
+        feature.zero_grad()
+        encoder.zero_grad()
+        if cfg.model_type=='INDP': indp.zero_grad()
+        if cfg.model_type=='CRF': crf.zero_grad()
+        else:
+            mldecoder.zero_grad()
+            if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
+                rltrain.zero_grad()
+
+        batch_to_tensors(cfg, batch)
+        F = feature()
+        H = encoder(F)
+        if cfg.model_type=='INDP':
+            log_probs = indp(H)
+            loss = indp.loss(log_probs)
+        if cfg.model_type=='CRF':
+            log_probs = crf(H)
+            loss = crf.loss(log_probs)
+        elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
+            loss, vloss = rltrain(H, mldecoder)
+        else:
+            log_probs = mldecoder(H)
+            loss = mldecoder.loss(log_probs)
+
+        loss.backward()
+        if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN': vloss.backward()
+
+        torch.nn.utils.clip_grad_norm(encoder.parameters(), cfg.max_gradient_norm)
+        torch.nn.utils.clip_grad_norm(feature.parameters(), cfg.max_gradient_norm)
+
+        if cfg.model_type=='INDP': torch.nn.utils.clip_grad_norm(indp.parameters(), cfg.max_gradient_norm)
+        if cfg.model_type=='CRF': torch.nn.utils.clip_grad_norm(crf.parameters(), cfg.max_gradient_norm)
+        else:
+            torch.nn.utils.clip_grad_norm(mldecoder.parameters(), cfg.max_gradient_norm)
+
+        feature.opt.step()
+        encoder.opt.step()
+        if cfg.model_type=='INDP': indp.opt.step()
+        if cfg.model_type=='CRF': crf.opt.step()
+        else:
+            mldecoder.opt.step()
+            if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
+                rltrain.critic_opt.step()
+
+        loss_value = loss.cpu().data.numpy()[0]
+        total_loss.append(loss_value)
+        if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
+            vloss_value = vloss.cpu().data.numpy()[0]
+            vtotal_loss.append(vloss_value)
+            ##
+            sys.stdout.write('\rBatch:{} | Loss:{} | Mean Loss:{} | VLoss:{} | Mean VLoss:{}'.format(
+                                                step,
+                                                loss_value,
+                                                np.mean(total_loss),
+                                                vloss_value,
+                                                np.mean(vtotal_loss)
+                                                )
+                            )
+            sys.stdout.flush()
+        else:
+            ##
+            sys.stdout.write('\rBatch:{} | Loss:{} | Mean Loss:{}'.format(
+                                                step,
+                                                loss_value,
+                                                np.mean(total_loss)
+                                                )
+                            )
+            sys.stdout.flush()
+    return
+
+def predict(cfg, o_file):
+    if cfg.mode=='train':
+        cfg.local_mode = 'dev'
+
+    elif cfg.mode=='test':
+        cfg.local_mode = 'test'
+
+    #Turn on evaluation mode which disables dropout.
+    feature.eval()
+    encoder.eval()
+    if cfg.model_type=='INDP': indp.eval()
+    if cfg.model_type=='CRF': crf.eval()
+    else:
+        mldecoder.eval()
+        if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
+            rltrain.eval()
+
+    #file stream to save predictions
+    f = open(o_file, 'w')
+    for batch in load_data(cfg):
+        batch_to_tensors(cfg, batch)
+        F = feature()
+        H = encoder(F)
+        if cfg.model_type=='INDP':
+            preds = indp.predict(H)[0].cpu().data.numpy()
+        if cfg.model_type=='CRF':
+            print "Not implemented"
+            exit()
+        else:
+            if cfg.search = 'greedy':
+                preds = mldecoder.greedy(H)[0].cpu().data.numpy()
+            elif cfg.search = 'beam':
+                preds = mldecoder.beam(H)[0][:,0,:].cpu().data.numpy()
+
+        save_predictions(cfg, batch, preds, f)
+
+    f.close()
+    return
+
 def run_model(mode, path, in_file, o_file):
-    global rltrain, critic_optim, feature, encoder, indp, feature_optim, encoder_optim, indp_optim, mldecoder, mldecoder_optim
+    global feature, encoder, indp, crf, mldecoder, rltrain
 
     cfg = Configuration()
+
     #General mode has two values: 'train' or 'test'
     cfg.mode = mode
-    cfg.beamsize = 4
-    cfg.rltrain_type = 'R'
-    cfg.gamma = 0.9
-    cfg.n_step = 4
 
     #Set Random Seeds
     random.seed(cfg.seed)
     np.random.seed(cfg.seed)
     torch.manual_seed(cfg.seed)
-    if torch.cuda.is_available():
+    if hasCuda:
         torch.cuda.manual_seed_all(cfg.seed)
 
     #Load Embeddings
@@ -222,55 +253,92 @@ def run_model(mode, path, in_file, o_file):
 
     #Construct models
     feature = Feature(cfg)
+    if hasCuda: feature.cuda()
     encoder = Encoder(cfg)
-    #indp = INDP(cfg)
-    mldecoder = MLDecoder(cfg)
-    rltrain = RLTrain(cfg)
+    if hasCuda: encoder.cuda()
 
-    cfg.mldecoder_type = 'TF'
+    if cfg.model_type=='INDP':
+        indp = INDP(cfg)
+        if hasCuda: indp.cuda()
 
-    feature_optim = optim.Adam(feature.parameters(), lr=cfg.learning_rate)
-    encoder_optim = optim.Adam(encoder.parameters(), lr=cfg.learning_rate)
-    #indp_optim = optim.Adam(indp.parameters(), lr=cfg.learning_rate)
-    mldecoder_optim = optim.Adam(mldecoder.parameters(), lr=cfg.learning_rate)
-    #rltrain_optim = optim.Adam(rltrain.parameters(), lr=cfg.learning_rate)
-    critic_optim = optim.Adam(rltrain.parameters(), lr=cfg.learning_rate, weight_decay=0.001)
+    elif cfg.model_type=='CRF':
+        print "Not implemented"
+        exit()
 
-    #Move models to cuda if possible
-    if torch.cuda.is_available():
-        feature.cuda()
-        encoder.cuda()
-        mldecoder.cuda()
-        rltrain.cuda()
-        #indp.cuda()
+    elif cfg.model_type=='TF-RNN':
+        mldecoder = MLDecoder(cfg)
+        if hasCuda: mldecoder.cuda()
+        cfg.mldecoder_type = 'TF'
+
+    elif cfg.model_type=='SS-RNN':
+        mldecoder = MLDecoder(cfg)
+        if hasCuda: mldecoder.cuda()
+        cfg.mldecoder_type = 'SS'
+
+    elif cfg.model_type=='DS-RNN':
+        mldecoder = MLDecoder(cfg)
+        if hasCuda: mldecoder.cuda()
+        cfg.mldecoder_type = 'DS'
+
+    elif cfg.model_type=='BR-RNN':
+        mldecoder = MLDecoder(cfg)
+        if hasCuda: mldecoder.cuda()
+        cfg.mldecoder_type = 'TF'
+        rltrain = RLTrain(cfg, mldecoder)
+        if hasCuda: rltrain.cuda()
+        cfg.rltrain_type = 'BR'
+        #For RL, the network should be pre-trained with teacher forced ML decoder.
+        feature.load_state_dict(torch.load(path + 'TF-RNN' + '_feature'))
+        encoder.load_state_dict(torch.load(path + 'TF-RNN' + '_encoder'))
+        mldecoder.load_state_dict(torch.load(path + 'TF-RNN' + '_predictor'))
+
+    elif cfg.model_type=='AC-RNN':
+        mldecoder = MLDecoder(cfg)
+        if hasCuda: mldecoder.cuda()
+        cfg.mldecoder_type = 'TF'
+        rltrain = RLTrain(cfg, mldecoder)
+        if hasCuda: rltrain.cuda()
+        cfg.rltrain_type = 'AC'
+        #For RL, the network should be pre-trained with teacher forced ML decoder.
+        feature.load_state_dict(torch.load(path + 'TF-RNN' + '_feature'))
+        encoder.load_state_dict(torch.load(path + 'TF-RNN' + '_encoder'))
+        mldecoder.load_state_dict(torch.load(path + 'TF-RNN' + '_predictor'))
 
     if mode=='train':
         o_file = './temp.predicted'
         best_val_cost = float('inf')
         best_val_epoch = 0
         first_start = time.time()
-        feature.load_state_dict(torch.load(path+'model_feature'))
-        encoder.load_state_dict(torch.load(path+'model_encoder'))
-        mldecoder.load_state_dict(torch.load(path+'model_mldecoder'))
         epoch=0
         while (epoch < cfg.max_epochs):
-            cfg.a = np.minimum(1.0, 0.5 + 0.05 * epoch)
             print
             print 'Model:{} | Epoch:{}'.format(cfg.model_type, epoch)
+
+            if cfg.model_type=='SS-RNN' or cfg.model_type=='DS-RNN':
+                #Specify the decaying schedule for sampling probability.
+                #inverse sigmoid schedule:
+                cfg.sampling_p = float(cfg.k)/float(cfg.k + np.exp(float(epoch)/cfg.k))
+
+            if cfg.model_type=='DS-RNN':
+                cfg.greedy_bias = np.minimum(10**6, (2)**epoch)
+
             start = time.time()
             run_epoch(cfg)
             print '\nModel:{} Validation'.format(cfg.model_type, epoch)
             predict(cfg, o_file)
-            val_cost = 100 - eval_on_dev(cfg, o_file)
-            print '\nValidation score:{}'.format(100 - val_cost)
+            val_cost = 100 - accuracy(cfg.dev_ref, o_file)
+            print '\nValidation accuracy:{}'.format(100 - val_cost)
             if val_cost < best_val_cost:
                 best_val_cost = val_cost
                 best_val_epoch = epoch
-                torch.save(feature.state_dict(), path+'Rmodel_feature')
-                torch.save(encoder.state_dict(), path+'Rmodel_encoder')
-                #torch.save(indp.state_dict(), path+'model_indp')
-                torch.save(mldecoder.state_dict(), path+'Rmodel_mldecoder')
-                torch.save(rltrain.state_dict(), path+'Rmodel_rltrain')
+                torch.save(feature.state_dict(), path + cfg.model_type + '_feature')
+                torch.save(encoder.state_dict(), path + cfg.model_type + '_encoder')
+                if cfg.model_type=='INDP': torch.save(indp.state_dict(), path + cfg.model_type + '_predictor')
+                if cfg.model_type=='TF-RNN' or cfg.model_type=='SS-RNN' or cfg.model_type=='DS-RNN':
+                    torch.save(mldecoder.state_dict(), path + cfg.model_type + '_predictor')
+                if cfg.model_type=='BR-RNN' or cfg.model_type=='AC-RNN':
+                    torch.save(mldecoder.state_dict(), path + cfg.model_type + '_predictor')
+                    torch.save(rltrain.state_dict(), path + cfg.model_type + '_critic')
 
             #For early stopping
             if epoch - best_val_epoch > cfg.early_stopping:
@@ -283,11 +351,15 @@ def run_model(mode, path, in_file, o_file):
         print 'Total training time:{} seconds'.format(time.time() - first_start)
 
     elif mode=='test':
-        feature.load_state_dict(torch.load(path+'Rmodel_feature'))
-        encoder.load_state_dict(torch.load(path+'Rmodel_encoder'))
-        #indp.load_state_dict(torch.load(path+'model_indp'))
-        mldecoder.load_state_dict(torch.load(path+'Rmodel_mldecoder'))
-        rltrain.load_state_dict(torch.load(path+'Rmodel_rltrain'))
+        feature.load_state_dict(torch.load(path + cfg.model_type + '_feature'))
+        encoder.load_state_dict(torch.load(path + cfg.model_type + '_encoder'))
+        if cfg.model_type=='INDP': indp.load_state_dict(torch.load(path + cfg.model_type + '_predictor'))
+        if cfg.model_type=='TF-RNN' or cfg.model_type=='SS-RNN' or cfg.model_type=='DS-RNN':
+            mldecoder.load_state_dict(torch.load(path + cfg.model_type + '_predictor'))
+        if cfg.model_type=='BR-RNN' or cfg.model_type=='AC-RNN':
+            mldecoder.load_state_dict(torch.load(path + cfg.model_type + '_predictor'))
+            rltrain.load_state_dict(torch.load(path + cfg.model_type + '_critic'))
+
         print
         print 'Model:{} Predicting'.format(cfg.model_type)
         start = time.time()
