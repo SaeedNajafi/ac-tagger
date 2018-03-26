@@ -6,11 +6,11 @@ class Configuration(object):
     tag_em_size = 128
     dec_rnn_units = 512
     dropout = 0.5
-    learning_rate = 0.005
+    learning_rate = 0.0005
     max_gradient_norm = 5.
     max_epochs = 128
     early_stopping = 10
-    batch_size = 32
+    batch_size = 10
     seed = 1234
 
     task = 'en_NER'

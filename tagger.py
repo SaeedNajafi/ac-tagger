@@ -7,6 +7,7 @@ from modules.mldecoder import MLDecoder
 from modules.indp import INDP
 from modules.rltrain import RLTrain
 import random
+from random import shuffle
 import re
 import os
 import sys
@@ -139,17 +140,23 @@ def run_epoch(cfg):
         mldecoder.train()
         if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
             rltrain.train()
-
-    for step, batch in enumerate(load_data(cfg)):
-
-        feature.zero_grad()
-        encoder.zero_grad()
-        if cfg.model_type=='INDP': indp.zero_grad()
-        elif cfg.model_type=='CRF': crf.zero_grad()
+    batches = []
+    for batch in load_data(cfg):
+	batches.append(batch)
+    shuffle(batches)
+    for step, batch in enumerate(batches):
+	cfg.d_batch_size = batch['d_batch_size']
+	cfg.max_s_len = batch['max_s_len']
+	cfg.max_w_len = batch['max_w_len']
+        feature.opt.zero_grad()
+        encoder.opt.zero_grad()
+        if cfg.model_type=='INDP': indp.opt.zero_grad()
+        elif cfg.model_type=='CRF': crf.opt.zero_grad()
+	elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
+                rltrain.opt.zero_grad()
+                rltrain.critic_opt.zero_grad()
         else:
-            mldecoder.zero_grad()
-            if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
-                rltrain.zero_grad()
+            mldecoder.opt.zero_grad()
 
         batch_to_tensors(cfg, batch)
         F = feature()
@@ -233,6 +240,9 @@ def predict(cfg, o_file):
     #file stream to save predictions
     f = open(o_file, 'w')
     for batch in load_data(cfg):
+	cfg.d_batch_size = batch['d_batch_size']
+        cfg.max_s_len = batch['max_s_len']
+        cfg.max_w_len = batch['max_w_len']
         batch_to_tensors(cfg, batch)
         F = feature()
         H = encoder(F)

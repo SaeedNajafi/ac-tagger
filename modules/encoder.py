@@ -85,7 +85,7 @@ class Encoder(nn.Module):
         HH = self.dense(outputs_dr_masked)
 
         #relu non-linear layer.
-        H = nn.functional.relu(HH)
+        H = nn.functional.tanh(HH)
 
         mask_expanded = mask.expand(cfg.d_batch_size, cfg.max_s_len, cfg.w_rnn_units)
         #H is the final matrix having final hidden vectors of steps.

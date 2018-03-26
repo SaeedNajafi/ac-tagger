@@ -68,18 +68,10 @@ class Feature(nn.Module):
 
 
         #We have 4 kinds of Capitalization patterns + 1 cap pad id.
-        cfg.cap_em_size = 4
-	caps = np.array([
-		[1.0, 0.0, 0.0, 0.0],
-		[0.0, 1.0, 0.0, 0.0],
-		[0.0, 0.0, 1.0, 0.0],
-		[0.0, 0.0, 0.0, 1.0],
-		[0.0, 0.0, 0.0, 0.0]
-		])
-	caps_tensor = torch.FloatTensor(caps)
+        cfg.cap_em_size = 16
         self.cap_em = nn.Embedding(5, cfg.cap_em_size)
-	self.cap_em.weight.data = caps_tensor
-        self.cap_em.weight.requires_grad = False
+	self.cap_em.weight.data[cfg.cap_pad_id].fill_(0)
+        self.cap_em.weight.requires_grad = True
 
         w_lt = torch.FloatTensor(cfg.data['w_v']) #word lookup table
         self.w_em = nn.Embedding(cfg.w_size, cfg.w_em_size)
