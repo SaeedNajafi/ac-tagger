@@ -50,7 +50,7 @@ def load_embeddings(cfg):
                 chars.append(ch)
 
     #Pad should be the last.
-    cfg.ch_pad = '§'
+    cfg.ch_pad = '@'
     chars.append(cfg.ch_pad)
 
     cfg.ch_size = len(chars)
@@ -298,8 +298,9 @@ def process_batch(cfg, batch):
 
         Word_Chars.append(word_chars_id)
 
+    
     #Set dynamic batch size
-    cfg.d_batch_size = len(S_Lens)
+    d_batch_size = len(S_Lens)
 
     #Creating reversed char sequences
     Rev_Char_Ids = []
@@ -323,7 +324,8 @@ def process_batch(cfg, batch):
         'w_mask': W_Mask,
         'w_cap': Cap_Ids,
         's_len': S_Lens,
-        'raw_w': Raw_Words
+        'raw_w': Raw_Words,
+	'd_batch_size': d_batch_size
         }
 
     if hasY:
@@ -337,48 +339,47 @@ def process_batch(cfg, batch):
 
 def pad(cfg, B):
     #Dynamically select max sentence and word length for the current batch.
-    cfg.max_s_len = max(B['s_len'])
-    cfg.max_w_len = max(B['w_len'])
-
+    B['max_s_len'] = max(B['s_len'])
+    B['max_w_len'] = max(B['w_len'])
     #Pad w with w_pad_id
     for sentence in B['w']:
-        pad_lst = [cfg.w_pad_id] * (cfg.max_s_len-len(sentence))
+        pad_lst = [cfg.w_pad_id] * (B['max_s_len']-len(sentence))
         sentence.extend(pad_lst)
 
     #Pad w with w_pad
     for sentence in B['raw_w']:
-        pad_lst = [cfg.w_pad] * (cfg.max_s_len-len(sentence))
+        pad_lst = [cfg.w_pad] * (B['max_s_len']-len(sentence))
         sentence.extend(pad_lst)
 
     #Pad w_cap with cap_pad_id
     for sentence in B['w_cap']:
-        pad_lst = [cfg.cap_pad_id] * (cfg.max_s_len-len(sentence))
+        pad_lst = [cfg.cap_pad_id] * (B['max_s_len']-len(sentence))
         sentence.extend(pad_lst)
 
     #Pad tag with tag_pad_id
     if B['tag'] is not None:
         for sequence in B['tag']:
-            pad_lst = [cfg.tag_pad_id] * (cfg.max_s_len-len(sequence))
+            pad_lst = [cfg.tag_pad_id] * (B['max_s_len']-len(sequence))
             sequence.extend(pad_lst)
 
     #Pad ch with ch_pad_id
     for word in B['ch']:
-        pad_lst = [cfg.ch_pad_id] * (cfg.max_w_len-len(word))
+        pad_lst = [cfg.ch_pad_id] * (B['max_w_len']-len(word))
         word.extend(pad_lst)
 
     #Pad rev_ch with ch_pad_id
     for word in B['rev_ch']:
-        pad_lst = [cfg.ch_pad_id] * (cfg.max_w_len-len(word))
+        pad_lst = [cfg.ch_pad_id] * (B['max_w_len']-len(word))
         word.extend(pad_lst)
 
     #Pad w_chs with 0
     for sentence in B['w_chs']:
-        pad_lst = [0] * (cfg.max_s_len-len(sentence))
+        pad_lst = [0] * (B['max_s_len']-len(sentence))
         sentence.extend(pad_lst)
 
     #Pad w_mask with 0.0
     for sentence in B['w_mask']:
-        pad_lst = [0.0] * (cfg.max_s_len-len(sentence))
+        pad_lst = [0.0] * (B['max_s_len']-len(sentence))
         sentence.extend(pad_lst)
 
     return
