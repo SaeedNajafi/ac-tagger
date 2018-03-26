@@ -24,7 +24,7 @@ class INDP(nn.Module):
                             bias=True
                             )
         self.param_init()
-	params = ifilter(lambda p: p.requires_grad, self.parameters())
+        params = ifilter(lambda p: p.requires_grad, self.parameters())
         self.opt = optim.Adam(params, lr=cfg.learning_rate)
         return
 

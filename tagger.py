@@ -140,19 +140,20 @@ def run_epoch(cfg):
         mldecoder.train()
         if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
             rltrain.train()
-    batches = []
-    for batch in load_data(cfg):
-	batches.append(batch)
+    batches = [batch for batch in load_data(cfg)]
     shuffle(batches)
     for step, batch in enumerate(batches):
-	cfg.d_batch_size = batch['d_batch_size']
-	cfg.max_s_len = batch['max_s_len']
-	cfg.max_w_len = batch['max_w_len']
+        cfg.d_batch_size = batch['d_batch_size']
+        cfg.max_s_len = batch['max_s_len']
+        cfg.max_w_len = batch['max_w_len']
+
         feature.opt.zero_grad()
         encoder.opt.zero_grad()
-        if cfg.model_type=='INDP': indp.opt.zero_grad()
-        elif cfg.model_type=='CRF': crf.opt.zero_grad()
-	elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
+        if cfg.model_type=='INDP':
+            indp.opt.zero_grad()
+        elif cfg.model_type=='CRF':
+            crf.opt.zero_grad()
+        elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
                 rltrain.opt.zero_grad()
                 rltrain.critic_opt.zero_grad()
         else:
@@ -186,11 +187,13 @@ def run_epoch(cfg):
 
         feature.opt.step()
         encoder.opt.step()
-        if cfg.model_type=='INDP': indp.opt.step()
-        elif cfg.model_type=='CRF': crf.opt.step()
-	elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
-		rltrain.opt.step()
-                rltrain.critic_opt.step()
+        if cfg.model_type=='INDP':
+            indp.opt.step()
+        elif cfg.model_type=='CRF':
+            crf.opt.step()
+        elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
+            rltrain.opt.step()
+            rltrain.critic_opt.step()
         else:
             mldecoder.opt.step()
 
@@ -240,7 +243,7 @@ def predict(cfg, o_file):
     #file stream to save predictions
     f = open(o_file, 'w')
     for batch in load_data(cfg):
-	cfg.d_batch_size = batch['d_batch_size']
+        cfg.d_batch_size = batch['d_batch_size']
         cfg.max_s_len = batch['max_s_len']
         cfg.max_w_len = batch['max_w_len']
         batch_to_tensors(cfg, batch)

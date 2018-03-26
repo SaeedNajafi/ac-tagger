@@ -43,9 +43,9 @@ class RLTrain(nn.Module):
                             bias=True
                             )
         self.param_init()
-	params = ifilter(lambda p: p.requires_grad, mldecoder.parameters())
+        params = ifilter(lambda p: p.requires_grad, mldecoder.parameters())
         self.opt = optim.SGD(params, lr=cfg.learning_rate)
-	params = ifilter(lambda p: p.requires_grad, self.parameters())
+        params = ifilter(lambda p: p.requires_grad, self.parameters())
         self.critic_opt = optim.Adam(params, lr=cfg.learning_rate, weight_decay=0.001)
         return
 

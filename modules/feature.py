@@ -31,11 +31,10 @@ class Feature(nn.Module):
                             hidden_size=cfg.ch_rnn_units,
                             bias=True
                             )
-
-	self.drop = nn.Dropout(cfg.dropout)
+        
         self.param_init()
         self.embeddings()
-	params = ifilter(lambda p: p.requires_grad, self.parameters())
+        params = ifilter(lambda p: p.requires_grad, self.parameters())
         self.opt = optim.Adam(params, lr=cfg.learning_rate)
         return
 
@@ -70,7 +69,7 @@ class Feature(nn.Module):
         #We have 4 kinds of Capitalization patterns + 1 cap pad id.
         cfg.cap_em_size = 16
         self.cap_em = nn.Embedding(5, cfg.cap_em_size)
-	self.cap_em.weight.data[cfg.cap_pad_id].fill_(0)
+        self.cap_em.weight.data[cfg.cap_pad_id].fill_(0)
         self.cap_em.weight.requires_grad = True
 
         w_lt = torch.FloatTensor(cfg.data['w_v']) #word lookup table
@@ -146,7 +145,5 @@ class Feature(nn.Module):
         Words = self.w_em(w)
         Caps = self.cap_em(w_cap)
 
-        features = torch.cat((Prefixes_masked, Words, Suffixes_masked), 2)
-	features_dr = self.drop(features)
-	final_features = torch.cat((features_dr, Caps), 2)
-        return final_features
+        features = torch.cat((Prefixes_masked, Words, Suffixes_masked, Caps), 2)
+        return features
