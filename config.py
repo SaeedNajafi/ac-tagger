@@ -13,6 +13,11 @@ class Configuration(object):
     batch_size = 32
     seed = 1234
 
+    task = 'en_NER'
+    #task = 'de_NER'
+    #task = 'POS'
+    #task = 'CCG'
+    
     """path to different files"""
     w_dic = './en_embeddings/' + 'glove.100.dic.txt'
     w_vector = './en_embeddings/' + 'glove.100.vectors.txt'

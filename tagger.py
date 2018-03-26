@@ -63,6 +63,13 @@ def save_predictions(cfg, batch, preds, f):
             #tag is the predicted tag for w
             tag_id = pred[w_idx]
             str_tag = cfg.data['id_tag'][tag_id]
+
+            if cfg.local_mode=='dev':
+                gtag = batch['tag'][s_idx][w_idx]
+                gtag_str = cfg.data['id_tag'][gtag]
+                str_tag += '\t' + gtag_str
+
+
             f.write(w + '\t' + str_tag + '\n')
 
             #Go to the next word in the sentence
@@ -93,7 +100,7 @@ def accuracy(ref_file, pred_file):
         pred_line = pred_lines[index].strip()
         if len(ref_line)!=0 and len(pred_line)!=0:
             Gtags = ref_line.split('\t')
-            tag = pred_line.split('\t')[1]
+            tag = pred_line.split('\t')[2]
             total += 1
             for gtag in Gtags:
                 if gtag==tag:
@@ -101,6 +108,19 @@ def accuracy(ref_file, pred_file):
                     break
 
     return float(correct/total) * 100
+
+
+#Only for NER.
+def fscore():
+    os.system("%s < %s > %s" % ('./evaluate/conlleval', 'temp.predicted', 'temp.score'))
+    result_lines = [line.rstrip() for line in codecs.open('temp.score', 'r', 'utf8')]
+    return float(result_lines[1].strip().split()[-1])
+
+def eval(cfg, ref_file, pred_file):
+    if cfg.task=='en_NER' or cfg.task=='de_NER':
+        return fscore()
+    else:
+        return accuracy(ref_file, pred_file)
 
 def run_epoch(cfg):
     cfg.local_mode = 'train'
@@ -326,7 +346,7 @@ def run_model(mode, path, in_file, o_file):
             run_epoch(cfg)
             print '\nModel:{} Validation'.format(cfg.model_type, epoch)
             predict(cfg, o_file)
-            val_cost = 100 - accuracy(cfg.dev_ref, o_file)
+            val_cost = 100 - eval(cfg, cfg.dev_ref, o_file)
             print '\nValidation accuracy:{}'.format(100 - val_cost)
             if val_cost < best_val_cost:
                 best_val_cost = val_cost
