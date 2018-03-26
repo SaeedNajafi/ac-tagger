@@ -7,7 +7,7 @@ def accuracy(ref_file, pred_file):
     pred_lines = open(pred_file, 'r').readlines()
 
     if len(ref_lines)!=len(pred_lines):
-        print "INFO: Wrong number of lines in reference and prediction files".
+        print "INFO: Wrong number of lines in reference and prediction files"
         exit()
 
     total = 0.0
