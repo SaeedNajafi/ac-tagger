@@ -42,7 +42,6 @@ class RLTrain(nn.Module):
                             bias=True
                             )
         self.param_init()
-        self.opt = optim.SGD(mldecoder.parameters(), lr=cfg.learning_rate)
         self.critic_opt = optim.Adam(self.parameters(), lr=cfg.learning_rate, weight_decay=0.001)
         return
 

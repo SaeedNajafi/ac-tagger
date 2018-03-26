@@ -1,1 +1,1 @@
-__all__ = ["feature", "encoder", "indp", "mldecoder", "rltrain"]
+__all__ = ["feature", "encoder", "indp", "mldecoder", "rltrain", "crf"]
