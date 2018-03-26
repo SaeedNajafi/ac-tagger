@@ -69,7 +69,7 @@ def save_predictions(cfg, batch, preds, f):
             w_idx += 1
 
         #Go to the next sentence
-        f.write("\n")
+        f.write('\n')
         s_idx += 1
 
     return
@@ -83,7 +83,7 @@ def accuracy(ref_file, pred_file):
     pred_lines = open(pred_file, 'r').readlines()
 
     if len(ref_lines)!=len(pred_lines):
-        print "INFO: Wrong number of lines in reference and prediction files".
+        print "INFO: Wrong number of lines in reference and prediction files"
         exit()
 
     total = 0.0
@@ -113,7 +113,7 @@ def run_epoch(cfg):
     feature.train()
     encoder.train()
     if cfg.model_type=='INDP': indp.train()
-    if cfg.model_type=='CRF': crf.train()
+    elif cfg.model_type=='CRF': crf.train()
     else:
         mldecoder.train()
         if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
@@ -124,7 +124,7 @@ def run_epoch(cfg):
         feature.zero_grad()
         encoder.zero_grad()
         if cfg.model_type=='INDP': indp.zero_grad()
-        if cfg.model_type=='CRF': crf.zero_grad()
+        elif cfg.model_type=='CRF': crf.zero_grad()
         else:
             mldecoder.zero_grad()
             if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
@@ -136,7 +136,7 @@ def run_epoch(cfg):
         if cfg.model_type=='INDP':
             log_probs = indp(H)
             loss = indp.loss(log_probs)
-        if cfg.model_type=='CRF':
+        elif cfg.model_type=='CRF':
             log_probs = crf(H)
             loss = crf.loss(log_probs)
         elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
@@ -152,14 +152,14 @@ def run_epoch(cfg):
         torch.nn.utils.clip_grad_norm(feature.parameters(), cfg.max_gradient_norm)
 
         if cfg.model_type=='INDP': torch.nn.utils.clip_grad_norm(indp.parameters(), cfg.max_gradient_norm)
-        if cfg.model_type=='CRF': torch.nn.utils.clip_grad_norm(crf.parameters(), cfg.max_gradient_norm)
+        elif cfg.model_type=='CRF': torch.nn.utils.clip_grad_norm(crf.parameters(), cfg.max_gradient_norm)
         else:
             torch.nn.utils.clip_grad_norm(mldecoder.parameters(), cfg.max_gradient_norm)
 
         feature.opt.step()
         encoder.opt.step()
         if cfg.model_type=='INDP': indp.opt.step()
-        if cfg.model_type=='CRF': crf.opt.step()
+        elif cfg.model_type=='CRF': crf.opt.step()
         else:
             mldecoder.opt.step()
             if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
@@ -202,7 +202,7 @@ def predict(cfg, o_file):
     feature.eval()
     encoder.eval()
     if cfg.model_type=='INDP': indp.eval()
-    if cfg.model_type=='CRF': crf.eval()
+    elif cfg.model_type=='CRF': crf.eval()
     else:
         mldecoder.eval()
         if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
@@ -216,13 +216,13 @@ def predict(cfg, o_file):
         H = encoder(F)
         if cfg.model_type=='INDP':
             preds = indp.predict(H)[0].cpu().data.numpy()
-        if cfg.model_type=='CRF':
+        elif cfg.model_type=='CRF':
             print "Not implemented"
             exit()
         else:
-            if cfg.search = 'greedy':
+            if cfg.search=='greedy':
                 preds = mldecoder.greedy(H)[0].cpu().data.numpy()
-            elif cfg.search = 'beam':
+            elif cfg.search=='beam':
                 preds = mldecoder.beam(H)[0][:,0,:].cpu().data.numpy()
 
         save_predictions(cfg, batch, preds, f)
@@ -334,9 +334,9 @@ def run_model(mode, path, in_file, o_file):
                 torch.save(feature.state_dict(), path + cfg.model_type + '_feature')
                 torch.save(encoder.state_dict(), path + cfg.model_type + '_encoder')
                 if cfg.model_type=='INDP': torch.save(indp.state_dict(), path + cfg.model_type + '_predictor')
-                if cfg.model_type=='TF-RNN' or cfg.model_type=='SS-RNN' or cfg.model_type=='DS-RNN':
+                elif cfg.model_type=='TF-RNN' or cfg.model_type=='SS-RNN' or cfg.model_type=='DS-RNN':
                     torch.save(mldecoder.state_dict(), path + cfg.model_type + '_predictor')
-                if cfg.model_type=='BR-RNN' or cfg.model_type=='AC-RNN':
+                elif cfg.model_type=='BR-RNN' or cfg.model_type=='AC-RNN':
                     torch.save(mldecoder.state_dict(), path + cfg.model_type + '_predictor')
                     torch.save(rltrain.state_dict(), path + cfg.model_type + '_critic')
 
@@ -354,9 +354,9 @@ def run_model(mode, path, in_file, o_file):
         feature.load_state_dict(torch.load(path + cfg.model_type + '_feature'))
         encoder.load_state_dict(torch.load(path + cfg.model_type + '_encoder'))
         if cfg.model_type=='INDP': indp.load_state_dict(torch.load(path + cfg.model_type + '_predictor'))
-        if cfg.model_type=='TF-RNN' or cfg.model_type=='SS-RNN' or cfg.model_type=='DS-RNN':
+        elif cfg.model_type=='TF-RNN' or cfg.model_type=='SS-RNN' or cfg.model_type=='DS-RNN':
             mldecoder.load_state_dict(torch.load(path + cfg.model_type + '_predictor'))
-        if cfg.model_type=='BR-RNN' or cfg.model_type=='AC-RNN':
+        elif cfg.model_type=='BR-RNN' or cfg.model_type=='AC-RNN':
             mldecoder.load_state_dict(torch.load(path + cfg.model_type + '_predictor'))
             rltrain.load_state_dict(torch.load(path + cfg.model_type + '_critic'))
 
