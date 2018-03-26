@@ -17,16 +17,16 @@ class Configuration(object):
     w_dic = './en_embeddings/' + 'glove.100.dic.txt'
     w_vector = './en_embeddings/' + 'glove.100.vectors.txt'
 
-    tag_dic = './en_ccg_data/' + 'ccg.tags'
-    train_raw = './en_ccg_data/' + 'ccg.train.raw'
-    train_ref = './en_ccg_data/' + 'ccg.train.ref'
-    dev_raw = './en_ccg_data/' + 'ccg.dev.raw'
-    dev_ref = './en_ccg_data/' + 'ccg.dev.ref'
+    tag_dic = './en_ner_data/' + 'en.ner.tags'
+    train_raw = './en_ner_data/' + 'ner.train.raw'
+    train_ref = './en_ner_data/' + 'ner.train.ref'
+    dev_raw = './en_ner_data/' + 'ner.dev.raw'
+    dev_ref = './en_ner_data/' + 'ner.dev.ref'
 
 
     """ Model Type """
     #Independent prediction of the tags.
-    #model_type = 'INDP'
+    model_type = 'INDP'
 
     #Conditional Random Field
     #model_type = 'CRF'
