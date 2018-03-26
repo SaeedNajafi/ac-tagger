@@ -32,7 +32,7 @@ class Feature(nn.Module):
                             bias=True
                             )
 
-	self.drop(cfg.dropout)
+	self.drop = nn.Dropout(cfg.dropout)
         self.param_init()
         self.embeddings()
 	params = ifilter(lambda p: p.requires_grad, self.parameters())
