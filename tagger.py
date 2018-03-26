@@ -13,6 +13,7 @@ import sys
 import time
 import numpy as np
 import torch
+import codecs
 
 hasCuda = torch.cuda.is_available()
 
@@ -112,7 +113,7 @@ def accuracy(ref_file, pred_file):
 
 #Only for NER.
 def fscore():
-    os.system("%s < %s > %s" % ('./evaluate/conlleval', 'temp.predicted', 'temp.score'))
+    os.system("%s -d '\t' < %s > %s" % ('./evaluate/conlleval', 'temp.predicted', 'temp.score'))
     result_lines = [line.rstrip() for line in codecs.open('temp.score', 'r', 'utf8')]
     return float(result_lines[1].strip().split()[-1])
 
@@ -180,10 +181,11 @@ def run_epoch(cfg):
         encoder.opt.step()
         if cfg.model_type=='INDP': indp.opt.step()
         elif cfg.model_type=='CRF': crf.opt.step()
+	elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
+		rltrain.opt.step()
+                rltrain.critic_opt.step()
         else:
             mldecoder.opt.step()
-            if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
-                rltrain.critic_opt.step()
 
         loss_value = loss.cpu().data.numpy()[0]
         total_loss.append(loss_value)

@@ -1,3 +1,4 @@
+from itertools import *
 import torch
 import numpy as np
 import torch.nn as nn
@@ -42,7 +43,10 @@ class RLTrain(nn.Module):
                             bias=True
                             )
         self.param_init()
-        self.critic_opt = optim.Adam(self.parameters(), lr=cfg.learning_rate, weight_decay=0.001)
+	params = ifilter(lambda p: p.requires_grad, mldecoder.parameters())
+        self.opt = optim.SGD(params, lr=cfg.learning_rate)
+	params = ifilter(lambda p: p.requires_grad, self.parameters())
+        self.critic_opt = optim.Adam(params, lr=cfg.learning_rate, weight_decay=0.001)
         return
 
     def param_init(self):

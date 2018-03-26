@@ -1,4 +1,6 @@
+from itertools import *
 import torch
+import numpy as np
 from torch.autograd import Variable
 import torch.nn as nn
 from torch.nn import init
@@ -30,9 +32,11 @@ class Feature(nn.Module):
                             bias=True
                             )
 
+	self.drop(cfg.dropout)
         self.param_init()
         self.embeddings()
-        self.opt = optim.Adam(self.parameters(), lr=cfg.learning_rate)
+	params = ifilter(lambda p: p.requires_grad, self.parameters())
+        self.opt = optim.Adam(params, lr=cfg.learning_rate)
         return
 
     def param_init(self):
@@ -62,11 +66,20 @@ class Feature(nn.Module):
         """Add embedding layer that maps from ids to vectors."""
         cfg = self.cfg
 
+
         #We have 4 kinds of Capitalization patterns + 1 cap pad id.
-        cfg.cap_em_size = 16
+        cfg.cap_em_size = 4
+	caps = np.array([
+		[1.0, 0.0, 0.0, 0.0],
+		[0.0, 1.0, 0.0, 0.0],
+		[0.0, 0.0, 1.0, 0.0],
+		[0.0, 0.0, 0.0, 1.0],
+		[0.0, 0.0, 0.0, 0.0]
+		])
+	caps_tensor = torch.FloatTensor(caps)
         self.cap_em = nn.Embedding(5, cfg.cap_em_size)
-        self.cap_em.weight.data[cfg.cap_pad_id].fill_(0.0)
-        self.cap_em.weight.requires_grad = True
+	self.cap_em.weight.data = caps_tensor
+        self.cap_em.weight.requires_grad = False
 
         w_lt = torch.FloatTensor(cfg.data['w_v']) #word lookup table
         self.w_em = nn.Embedding(cfg.w_size, cfg.w_em_size)
@@ -141,5 +154,7 @@ class Feature(nn.Module):
         Words = self.w_em(w)
         Caps = self.cap_em(w_cap)
 
-        features = torch.cat((Prefixes_masked, Words, Suffixes_masked, Caps), 2)
-        return features
+        features = torch.cat((Prefixes_masked, Words, Suffixes_masked), 2)
+	features_dr = self.drop(features)
+	final_features = torch.cat((features_dr, Caps), 2)
+        return final_features

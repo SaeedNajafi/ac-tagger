@@ -1,3 +1,4 @@
+from itertools import *
 import torch
 from torch.autograd import Variable
 import torch.nn as nn
@@ -39,7 +40,8 @@ class Encoder(nn.Module):
         self.drop = nn.Dropout(cfg.dropout)
 
         self.param_init()
-        self.opt = optim.Adam(self.parameters(), lr=cfg.learning_rate)
+	params = ifilter(lambda p: p.requires_grad, self.parameters())
+        self.opt = optim.Adam(params, lr=cfg.learning_rate)
         return
 
     def param_init(self):
@@ -66,15 +68,13 @@ class Encoder(nn.Module):
 
         w_mask = Variable(cfg.B['w_mask'].cuda()) if hasCuda else Variable(cfg.B['w_mask'])
 
-        #F is the feature vector.
-        F_dr = self.drop(F)
 
         #Create a variable for initial hidden vector of RNNs.
         zeros = torch.zeros(2, cfg.d_batch_size, cfg.w_rnn_units)
         h0 = Variable(zeros.cuda()) if hasCuda else Variable(zeros)
 
         #Bi-directional RNN
-        outputs, _ = self.w_rnn(F_dr, h0)
+        outputs, _ = self.w_rnn(F, h0)
 
         outputs_dr = self.drop(outputs)
 

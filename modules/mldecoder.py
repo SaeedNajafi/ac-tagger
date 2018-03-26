@@ -1,3 +1,4 @@
+from itertools import *
 import torch
 import numpy as np
 import torch.nn as nn
@@ -40,7 +41,8 @@ class MLDecoder(nn.Module):
 
         self.param_init()
         self.embeddings()
-        self.opt = optim.Adam(self.parameters(), lr=cfg.learning_rate)
+	params = ifilter(lambda p: p.requires_grad, self.parameters())
+        self.opt = optim.Adam(params, lr=cfg.learning_rate)
         return
 
     def param_init(self):
