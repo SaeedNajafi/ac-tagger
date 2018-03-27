@@ -68,14 +68,12 @@ class Encoder(nn.Module):
 
         w_mask = Variable(cfg.B['w_mask'].cuda()) if hasCuda else Variable(cfg.B['w_mask'])
 
-        F_dr = self.drop(F)
-
         #Create a variable for initial hidden vector of RNNs.
         zeros = torch.zeros(2, cfg.d_batch_size, cfg.w_rnn_units)
         h0 = Variable(zeros.cuda()) if hasCuda else Variable(zeros)
 
         #Bi-directional RNN
-        outputs, _ = self.w_rnn(F_dr, h0)
+        outputs, _ = self.w_rnn(F, h0)
 
         outputs_dr = self.drop(outputs)
 
@@ -86,6 +84,7 @@ class Encoder(nn.Module):
         HH = self.dense(outputs_dr_masked)
 
         #tanh non-linear layer.
+        #Do not change it to relu, it lowers results.
         H = nn.functional.tanh(HH)
 
         mask_expanded = mask.expand(cfg.d_batch_size, cfg.max_s_len, cfg.w_rnn_units)

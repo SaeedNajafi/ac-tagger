@@ -31,7 +31,9 @@ class Feature(nn.Module):
                             hidden_size=cfg.ch_rnn_units,
                             bias=True
                             )
-        
+
+        self.drop = nn.Dropout(cfg.dropout)
+
         self.param_init()
         self.embeddings()
         params = ifilter(lambda p: p.requires_grad, self.parameters())
@@ -145,5 +147,7 @@ class Feature(nn.Module):
         Words = self.w_em(w)
         Caps = self.cap_em(w_cap)
 
-        features = torch.cat((Prefixes_masked, Words, Suffixes_masked, Caps), 2)
-        return features
+        features = torch.cat((Prefixes_masked, Words, Suffixes_masked), 2)
+        features_dr = self.drop(features)
+        final_features = torch.cat((features_dr, Caps), 2)
+        return final_features
