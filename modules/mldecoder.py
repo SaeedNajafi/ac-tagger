@@ -205,8 +205,8 @@ class MLDecoder(nn.Module):
 
         #We feed the probability-weighted average of all tag embeddings biased strongly
         #towards the greedily generated tag.
-        bias = cfg.greedy_bias
-
+        bias_tensor = torch.FloatTensor(1,).fill_(cfg.greedy_bias)
+	bias = Variable(bias_tensor.cuda()) if hasCuda else Variable(bias_tensor)
         flip_coin = torch.rand(cfg.d_batch_size, cfg.max_s_len)
 
         #If equal to or greater than the sampling probabiliy,
