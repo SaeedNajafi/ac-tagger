@@ -169,7 +169,7 @@ def run_epoch(cfg):
             log_probs = crf(H)
             loss = crf.loss(log_probs)
         elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
-            loss, vloss = rltrain(H, mldecoder)
+            loss, vloss = rltrain(H)
         else:
             log_probs = mldecoder(H)
             loss = mldecoder.loss(log_probs)
