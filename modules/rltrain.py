@@ -194,6 +194,9 @@ class RLTrain(nn.Module):
         signs = torch.eq(pos_neq, rewards).float()
 
         #Do not back propagate through Returns and V_es!
+        #biased advantage in favor of true tags, against wrong tags.
+        #if the advantage was negative for a true tag, or
+        #the advantage was positive for a wrong tag, make the advantages zero!
         biased_advantages = signs * advantages
         if hasCuda:
             deltas = Variable(biased_advantages.data.cuda(), requires_grad=False)

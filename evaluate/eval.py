@@ -1,6 +1,6 @@
 import sys
 
-#Used for POS and CCG.
+#Used for final POS and CCG evaluation on test sets.
 def accuracy(ref_file, pred_file):
     #Top1 Accuracy
     ref_lines = open(ref_file, 'r').readlines()

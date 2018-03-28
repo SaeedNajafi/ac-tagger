@@ -62,11 +62,12 @@ def save_predictions(cfg, batch, preds, f):
             #w is the word for which we predict a tag
             w = batch['raw_w'][s_idx][w_idx]
 
-            #tag is the predicted tag for w
+            #tag_id is the predicted tag for w
             tag_id = pred[w_idx]
             pred_str = cfg.data['id_tag'][tag_id]
 
             if cfg.local_mode=='dev':
+                #gold tag for dev set.
                 gtag = batch['tag'][s_idx][w_idx]
                 gtag_str = cfg.data['id_tag'][gtag]
                 f.write(w + '\t' + gtag_str + '\t' + pred_str + '\n')
@@ -83,8 +84,6 @@ def save_predictions(cfg, batch, preds, f):
     return
 
 #Used to evaluate model's performance on the dev set w.r.t. top1 tagging accuracy.
-#Notice, we do not use F1-score for NER.
-#Universilay we use accuracy for POS/CCG/NER.
 def accuracy(ref_file, pred_file):
     #Top1 Accuracy
     ref_lines = open(ref_file, 'r').readlines()
@@ -117,7 +116,7 @@ def fscore():
     result_lines = [line.rstrip() for line in codecs.open('temp.score', 'r', 'utf8')]
     return float(result_lines[1].strip().split()[-1])
 
-def eval(cfg, ref_file, pred_file):
+def evaluate(cfg, ref_file, pred_file):
     if cfg.task=='en_NER' or cfg.task=='de_NER':
         return fscore()
     else:
@@ -361,7 +360,7 @@ def run_model(mode, path, in_file, o_file):
             run_epoch(cfg)
             print '\nModel:{} Validation'.format(cfg.model_type, epoch)
             predict(cfg, o_file)
-            val_cost = 100 - eval(cfg, cfg.dev_ref, o_file)
+            val_cost = 100 - evaluate(cfg, cfg.dev_ref, o_file)
             print '\nValidation score:{}'.format(100 - val_cost)
             if val_cost < best_val_cost:
                 best_val_cost = val_cost
