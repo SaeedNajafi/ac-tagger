@@ -250,18 +250,18 @@ class RLTrain(nn.Module):
         V_es = V_es * w_mask
         Returns = torch.matmul(rewards, gM)
         for i in range(cfg.max_s_len-n):
-            Returns[:,i] += (l ** n) * V_es[:, i + n]
+            Returns[:,i].data = Returns[:,i].data + (l ** n) * V_es[:, i + n].data
 
-        advantages = Returns - V_es.data
+        advantages = Returns - V_es
         pos_neq = torch.ge(advantages, 0.0).float()
-        signs = torch.eq(pos_neq, rewards.data).float()
+        signs = torch.eq(pos_neq, rewards).float()
 
         #Do not back propagate through Returns and V_es!
         biased_advantages = signs * advantages
         if hasCuda:
-            deltas = Variable(biased_advantages.cuda(), requires_grad=False)
+            deltas = Variable(biased_advantages.data.cuda(), requires_grad=False)
         else:
-            deltas = Variable(biased_advantages, requires_grad=False)
+            deltas = Variable(biased_advantages.data, requires_grad=False)
 
         rlloss = -torch.mean(torch.mean(action_log_policies * deltas * w_mask, dim=1), dim=0)
         vloss = self.V_loss(Returns, V_es)
