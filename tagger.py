@@ -6,8 +6,8 @@ from modules.encoder import Encoder
 from modules.mldecoder import MLDecoder
 from modules.indp import INDP
 from modules.rltrain import RLTrain
-import random
 from random import shuffle
+import random
 import re
 import os
 import sys

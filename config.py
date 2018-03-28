@@ -7,6 +7,7 @@ class Configuration(object):
     dec_rnn_units = 512
     dropout = 0.5
     learning_rate = 0.0005
+    rl_step_size = 0.00005
     max_gradient_norm = 5.
     max_epochs = 128
     early_stopping = 10
@@ -17,7 +18,7 @@ class Configuration(object):
     #task = 'de_NER'
     #task = 'POS'
     #task = 'CCG'
-    
+
     """path to different files"""
     w_dic = './en_embeddings/' + 'glove.100.dic.txt'
     w_vector = './en_embeddings/' + 'glove.100.vectors.txt'
