@@ -64,15 +64,14 @@ def save_predictions(cfg, batch, preds, f):
 
             #tag is the predicted tag for w
             tag_id = pred[w_idx]
-            str_tag = cfg.data['id_tag'][tag_id]
+            pred_str = cfg.data['id_tag'][tag_id]
 
             if cfg.local_mode=='dev':
                 gtag = batch['tag'][s_idx][w_idx]
                 gtag_str = cfg.data['id_tag'][gtag]
-                str_tag += '\t' + gtag_str
-
-
-            f.write(w + '\t' + str_tag + '\n')
+                f.write(w + '\t' + gtag_str + '\t' + pred_str + '\n')
+            else:
+                f.write(w + '\t' + pred_str + '\n')
 
             #Go to the next word in the sentence
             w_idx += 1
