@@ -45,8 +45,8 @@ class RLTrain(nn.Module):
         self.param_init()
         params = ifilter(lambda p: p.requires_grad, mldecoder.parameters())
         self.opt = optim.SGD(params, lr=cfg.learning_rate)
-        params = ifilter(lambda p: p.requires_grad, self.parameters())
-        self.critic_opt = optim.Adam(params, lr=cfg.learning_rate, weight_decay=0.001)
+        cr_params = ifilter(lambda p: p.requires_grad, self.parameters())
+        self.critic_opt = optim.SGD(cr_params, lr=cfg.learning_rate, weight_decay=0.001)
         return
 
     def param_init(self):
@@ -91,7 +91,7 @@ class RLTrain(nn.Module):
         """
         cfg = self.cfg
         #Do not back propagate through Returns!
-        in_Returns = Variable(Returns.cuda(), requires_grad=False) if hasCuda else Variable(Returns, requires_grad=False)
+        in_Returns = Variable(Returns.data.cuda(), requires_grad=False) if hasCuda else Variable(Returns.data, requires_grad=False)
 
         #mask pads
         w_mask = Variable(cfg.B['w_mask'].cuda()) if hasCuda else Variable(cfg.B['w_mask'])
@@ -155,7 +155,6 @@ class RLTrain(nn.Module):
         type = cfg.rltrain_type
         if type=='BR':
             return self.REINFORCE(V_es, taken_actions, action_log_policies)
-
         elif type=='AC':
             return self.Actor_Critic(V_es, taken_actions, action_log_policies)
 
@@ -190,16 +189,16 @@ class RLTrain(nn.Module):
         rewards = is_true_tag.float() * w_mask
         V_es = V_es * w_mask
         Returns = torch.matmul(rewards, gM)
-        advantages = Returns - V_es.data
+        advantages = Returns - V_es
         pos_neq = torch.ge(advantages, 0.0).float()
-        signs = torch.eq(pos_neq, rewards.data).float()
+        signs = torch.eq(pos_neq, rewards).float()
 
         #Do not back propagate through Returns and V_es!
         biased_advantages = signs * advantages
         if hasCuda:
-            deltas = Variable(biased_advantages.cuda(), requires_grad=False)
+            deltas = Variable(biased_advantages.data.cuda(), requires_grad=False)
         else:
-            deltas = Variable(biased_advantages, requires_grad=False)
+            deltas = Variable(biased_advantages.data, requires_grad=False)
 
         rlloss = -torch.mean(torch.mean(action_log_policies * deltas * w_mask, dim=1), dim=0)
         vloss = self.V_loss(Returns, V_es)

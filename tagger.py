@@ -140,6 +140,7 @@ def run_epoch(cfg):
         mldecoder.train()
         if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
             rltrain.train()
+
     batches = [batch for batch in load_data(cfg)]
     shuffle(batches)
     for step, batch in enumerate(batches):
