@@ -358,10 +358,9 @@ def run_model(mode, path, in_file, o_file):
 
             start = time.time()
             run_epoch(cfg)
-            print '\nModel:{} Validation'.format(cfg.model_type, epoch)
             predict(cfg, o_file)
             val_cost = 100 - evaluate(cfg, cfg.dev_ref, o_file)
-            print '\nValidation score:{}'.format(100 - val_cost)
+            print '\nlValidation score:{}'.format(100 - val_cost)
             if val_cost < best_val_cost:
                 best_val_cost = val_cost
                 best_val_epoch = epoch

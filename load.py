@@ -152,7 +152,8 @@ def process_chars(cfg, word):
         if ch in ch_id:
             lst.append(ch_id[ch])
         else:
-            print "INFO: Could not find the following char and ignored it: ", ch
+            lst.append(ch_id[cfg.ch_pad])
+            print "INFO: Could not find the following char and replaced it with pad: ", ch
 
     return lst
 
