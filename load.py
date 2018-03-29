@@ -45,13 +45,13 @@ def load_embeddings(cfg):
     print "INFO: Loading characters!"
     chars = []
     for w in words:
-        for ch in list(w):
+        for ch in list(w.decode('utf8')):
             if ch not in chars:
                 chars.append(ch)
 
     #Pad should be the last.
     cfg.ch_pad = '@'
-    chars.append(cfg.ch_pad)
+    chars.append(cfg.ch_pad.decode('utf8'))
 
     cfg.ch_size = len(chars)
     ep = np.sqrt(np.divide(6.0, cfg.ch_em_size))
@@ -146,7 +146,7 @@ def process_tag(cfg, tag):
 
 def process_chars(cfg, word):
     ch_id = cfg.data['ch_id']
-    word = word.lower()
+    word = word.lower().decode('utf8')
     lst = []
     for ch in list(word):
         if ch in ch_id:
