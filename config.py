@@ -11,7 +11,7 @@ class Configuration(object):
     max_gradient_norm = 5.
     max_epochs = 128
     early_stopping = 5
-    batch_size = 10
+    batch_size = 8
     seed = 111
 
     #task = 'en_NER'
@@ -20,14 +20,15 @@ class Configuration(object):
     #task = 'CCG'
 
     """path to different files"""
-    w_dic = './de_embeddings/' + 'ge_word_dic.txt'
-    w_vector = './de_embeddings/' + 'ge_word_vector.txt'
+    w_dic = './data/de_embeddings/' + 'ge_word_dic.txt'
+    w_vector = './data/de_embeddings/' + 'ge_word_vector.txt'
 
-    tag_dic = './de_ner_data/' + 'de.ner.tags'
-    train_raw = './de_ner_data/' + 'de.ner.train.raw'
-    train_ref = './de_ner_data/' + 'de.ner.train.ref'
-    dev_raw = './de_ner_data/' + 'de.ner.dev.raw'
-    dev_ref = './de_ner_data/' + 'de.ner.dev.ref'
+    ch_dic = './data/de_ner_data/' + 'de.ner.chars'
+    tag_dic = './data/de_ner_data/' + 'de.ner.tags'
+    train_raw = './data/de_ner_data/' + 'de.ner.train.raw'
+    train_ref = './data/de_ner_data/' + 'de.ner.train.ref'
+    dev_raw = './data/de_ner_data/' + 'de.ner.dev.raw'
+    dev_ref = './data/de_ner_data/' + 'de.ner.dev.ref'
 
 
     """ Model Type """
