@@ -1,33 +1,33 @@
 class Configuration(object):
     """Model hyperparams and data information"""
-    w_rnn_units = 512
+    w_rnn_units = 256
     ch_rnn_units = 32
     ch_em_size = 32
-    tag_em_size = 128
-    dec_rnn_units = 512
+    tag_em_size = 32
+    dec_rnn_units = 256
     dropout = 0.5
     learning_rate = 0.0005
     rl_step_size = 0.00005
     max_gradient_norm = 5.
     max_epochs = 128
     early_stopping = 5
-    batch_size = 32
+    batch_size = 10
     seed = 111
 
-    task = 'en_NER'
-    #task = 'de_NER'
+    #task = 'en_NER'
+    task = 'de_NER'
     #task = 'POS'
     #task = 'CCG'
 
     """path to different files"""
-    w_dic = './en_embeddings/' + 'glove.100.dic.txt'
-    w_vector = './en_embeddings/' + 'glove.100.vectors.txt'
+    w_dic = './de_embeddings/' + 'ge_word_dic.txt'
+    w_vector = './de_embeddings/' + 'ge_word_vector.txt'
 
-    tag_dic = './en_ner_data/' + 'en.ner.tags'
-    train_raw = './en_ner_data/' + 'ner.train.raw'
-    train_ref = './en_ner_data/' + 'ner.train.ref'
-    dev_raw = './en_ner_data/' + 'ner.dev.raw'
-    dev_ref = './en_ner_data/' + 'ner.dev.ref'
+    tag_dic = './de_ner_data/' + 'de.ner.tags'
+    train_raw = './de_ner_data/' + 'de.ner.train.raw'
+    train_ref = './de_ner_data/' + 'de.ner.train.ref'
+    dev_raw = './de_ner_data/' + 'de.ner.dev.raw'
+    dev_ref = './de_ner_data/' + 'de.ner.dev.ref'
 
 
     """ Model Type """

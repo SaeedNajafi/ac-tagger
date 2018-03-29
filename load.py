@@ -146,7 +146,7 @@ def process_tag(cfg, tag):
 
 def process_chars(cfg, word):
     ch_id = cfg.data['ch_id']
-    word = word.lower().decode('utf8')
+    word = word.lower()
     lst = []
     for ch in list(word):
         if ch in ch_id:
