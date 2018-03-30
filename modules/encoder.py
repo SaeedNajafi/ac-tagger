@@ -44,7 +44,7 @@ class Encoder(nn.Module):
         if model_type=='AC-RNN' or model_type=='BR-RNN':
             #Only for RL-training.
             self.opt = optim.SGD(params, lr=cfg.rl_step_size)
-        elif:
+        else:
             self.opt = optim.Adam(params, lr=cfg.learning_rate)
         return
 
