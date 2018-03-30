@@ -41,7 +41,11 @@ class Encoder(nn.Module):
 
         self.param_init()
         params = ifilter(lambda p: p.requires_grad, self.parameters())
-        self.opt = optim.Adam(params, lr=cfg.learning_rate)
+        if model_type=='AC-RNN' or model_type=='BR-RNN':
+            #Only for RL-training.
+            self.opt = optim.SGD(params, lr=cfg.rl_step_size)
+        elif:
+            self.opt = optim.Adam(params, lr=cfg.learning_rate)
         return
 
     def param_init(self):
@@ -72,8 +76,10 @@ class Encoder(nn.Module):
         zeros = torch.zeros(2, cfg.d_batch_size, cfg.w_rnn_units)
         h0 = Variable(zeros.cuda()) if hasCuda else Variable(zeros)
 
+        F_dr = self.drop(F)
+
         #Bi-directional RNN
-        outputs, _ = self.w_rnn(F, h0)
+        outputs, _ = self.w_rnn(F_dr, h0)
 
         outputs_dr = self.drop(outputs)
 

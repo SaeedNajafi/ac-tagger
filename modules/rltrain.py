@@ -12,7 +12,7 @@ class RLTrain(nn.Module):
     """
     This module applies RL training to the decoder RNN.
     It has 2 variants:
-        1- 'R': Reinforce with baseline
+        1- 'BR': Reinforce with baseline
         2- 'AC': Actor-critic
     """
 
@@ -44,6 +44,7 @@ class RLTrain(nn.Module):
                             )
         self.param_init()
         params = ifilter(lambda p: p.requires_grad, mldecoder.parameters())
+        #For RL, we always use SGD.
         self.opt = optim.SGD(params, lr=cfg.rl_step_size)
         cr_params = ifilter(lambda p: p.requires_grad, self.parameters())
         self.critic_opt = optim.SGD(cr_params, lr=cfg.rl_step_size, weight_decay=0.001)

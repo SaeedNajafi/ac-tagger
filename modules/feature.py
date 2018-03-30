@@ -37,7 +37,11 @@ class Feature(nn.Module):
         self.param_init()
         self.embeddings()
         params = ifilter(lambda p: p.requires_grad, self.parameters())
-        self.opt = optim.Adam(params, lr=cfg.learning_rate)
+        if model_type=='AC-RNN' or model_type=='BR-RNN':
+            #Only for RL-training.
+            self.opt = optim.SGD(params, lr=cfg.rl_step_size)
+        elif:
+            self.opt = optim.Adam(params, lr=cfg.learning_rate)
         return
 
     def param_init(self):
@@ -69,7 +73,7 @@ class Feature(nn.Module):
 
 
         #We have 4 kinds of Capitalization patterns + 1 cap pad id.
-        cfg.cap_em_size = 16
+        cfg.cap_em_size = cfg.ch_em_size
         self.cap_em = nn.Embedding(5, cfg.cap_em_size)
         self.cap_em.weight.data[cfg.cap_pad_id].fill_(0)
         self.cap_em.weight.requires_grad = True
@@ -147,7 +151,5 @@ class Feature(nn.Module):
         Words = self.w_em(w)
         Caps = self.cap_em(w_cap)
 
-        features = torch.cat((Prefixes_masked, Words, Suffixes_masked), 2)
-        features_dr = self.drop(features)
-        final_features = torch.cat((features_dr, Caps), 2)
-        return final_features
+        features = torch.cat((Prefixes_masked, Words, Suffixes_masked, Caps), 2)
+        return features
