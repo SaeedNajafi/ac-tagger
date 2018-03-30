@@ -41,7 +41,7 @@ class Encoder(nn.Module):
 
         self.param_init()
         params = ifilter(lambda p: p.requires_grad, self.parameters())
-        if model_type=='AC-RNN' or model_type=='BR-RNN':
+        if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
             #Only for RL-training.
             self.opt = optim.SGD(params, lr=cfg.rl_step_size)
         else:
