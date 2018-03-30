@@ -11,7 +11,7 @@ class Configuration(object):
     max_gradient_norm = 5.
     max_epochs = 128
     early_stopping = 5
-    batch_size = 8
+    batch_size = 32
     seed = 111
 
     #task = 'en_NER'
