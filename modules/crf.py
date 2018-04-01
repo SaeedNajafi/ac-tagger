@@ -122,7 +122,7 @@ class CRF(nn.Module):
         return crf_log_likelihood
 
     def loss(self, crf_log_likelihood):
-        loss = -1 * ctorch.sum(crf_log_likelihood, dim=0)
+        loss = -1 * torch.sum(crf_log_likelihood, dim=0)
         return loss
 
     def predict(self, H):
