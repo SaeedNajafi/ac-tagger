@@ -53,11 +53,13 @@ class CRF(nn.Module):
 
     def numerator_score(self, scores):
         cfg = self.cfg
-	emissions = scores.permute(1,0,2)
+        emissions = scores.permute(1,0,2)
+
         w_mask = Variable(cfg.B['w_mask'].cuda()) if hasCuda else Variable(cfg.B['w_mask'])
         tag = Variable(cfg.B['tag'].cuda()) if hasCuda else Variable(cfg.B['tag'])
-	tags = tag.permute(1,0)
-	mask = w_mask.permute(1,0)
+
+        tags = tag.permute(1,0)
+        mask = w_mask.permute(1,0)
 
         #numerator score
         num_score = self.start_transitions[tags[0]]
@@ -86,9 +88,10 @@ class CRF(nn.Module):
     def partition_score(self, scores):
         #http://www.cs.columbia.edu/~mcollins/fb.pdf
         cfg = self.cfg
-	emissions = scores.permute(1,0,2)
+        emissions = scores.permute(1,0,2)
+        
         w_mask = Variable(cfg.B['w_mask'].cuda()) if hasCuda else Variable(cfg.B['w_mask'])
-	mask = w_mask.permute(1,0)
+        mask = w_mask.permute(1,0)
 
         #Start transition score and first emission
         log_prob = self.start_transitions.view(1, -1) + emissions[0]
