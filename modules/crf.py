@@ -74,7 +74,7 @@ class CRF(nn.Module):
 
         s_len = Variable(cfg.B['s_len'].cuda()) if hasCuda else Variable(cfg.B['s_len'])
         last_tag_indices = s_len - 1
-        last_tags = tags.gather(1, last_tag_indices.view(-1, 1)).squeeze(1)
+        last_tags = tag.gather(1, last_tag_indices.view(-1, 1)).squeeze(1)
 
         #End transition score
         num_score += self.end_transitions[last_tags]
@@ -89,7 +89,7 @@ class CRF(nn.Module):
         #http://www.cs.columbia.edu/~mcollins/fb.pdf
         cfg = self.cfg
         emissions = scores.permute(1,0,2)
-        
+
         w_mask = Variable(cfg.B['w_mask'].cuda()) if hasCuda else Variable(cfg.B['w_mask'])
         mask = w_mask.permute(1,0)
 
