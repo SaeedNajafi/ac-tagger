@@ -1,17 +1,17 @@
 class Configuration(object):
     """Model hyperparams and data information"""
-    w_rnn_units = 256
-    ch_rnn_units = 32
-    ch_em_size = 32
-    tag_em_size = 32
-    dec_rnn_units = 256
+    w_rnn_units = 200
+    ch_rnn_units = 25
+    ch_em_size = 25
+    tag_em_size = 25
+    dec_rnn_units = 200
     dropout = 0.5
     learning_rate = 0.0005
     rl_step_size = 0.05
     max_gradient_norm = 5.
     max_epochs = 128
-    early_stopping = 10
-    batch_size = 32
+    early_stopping = 5
+    batch_size = 10
     seed = 125
 
     task = 'en_NER'
@@ -36,7 +36,7 @@ class Configuration(object):
     #model_type = 'INDP'
 
     #Conditional Random Field
-    model_type = 'CRF'
+    #model_type = 'CRF'
 
     #Decoder RNN trained only with teacher forcing
     #model_type = 'TF-RNN'

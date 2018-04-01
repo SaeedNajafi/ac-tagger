@@ -45,12 +45,12 @@ class RLTrain(nn.Module):
         self.param_init()
 
         #For RL, we always use SGD.
-        self.opt = optim.SGD(mldecoder.params, lr=cfg.rl_step_size)
+        self.opt = optim.SGD(mldecoder.parameters(), lr=cfg.rl_step_size)
 
         self.cr_params = ifilter(lambda p: p.requires_grad, self.parameters())
 
         self.critic_opt = optim.SGD(self.cr_params, lr=cfg.rl_step_size, weight_decay=0.001)
-        
+
         return
 
     def param_init(self):

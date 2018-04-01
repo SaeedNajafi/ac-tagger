@@ -19,7 +19,6 @@ class Feature(nn.Module):
         super(Feature, self).__init__()
 
         self.cfg = cfg
-
         self.fw_ch_rnn = nn.GRUCell(
                             input_size=cfg.ch_em_size,
                             hidden_size=cfg.ch_rnn_units,
