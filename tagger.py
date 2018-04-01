@@ -254,7 +254,7 @@ def predict(cfg, o_file):
         if cfg.model_type=='INDP':
             preds = indp.predict(H)[0].cpu().data.numpy()
         elif cfg.model_type=='CRF':
-            preds = crf.predict(H)[0].cpu().data.numpy()
+            preds = crf.predict(H)
         else:
             if cfg.search=='greedy':
                 preds = mldecoder.greedy(H)[0].cpu().data.numpy()
