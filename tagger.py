@@ -112,7 +112,6 @@ def accuracy(ref_file, pred_file):
 
     return float(correct/total) * 100
 
-
 #Only for NER.
 def fscore():
     os.system("%s -d '\t' < %s > %s" % ('./evaluate/conlleval', 'temp.predicted', 'temp.score'))
@@ -179,13 +178,15 @@ def run_epoch(cfg):
         loss.backward()
         if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN': vloss.backward()
 
-        torch.nn.utils.clip_grad_norm(encoder.parameters(), cfg.max_gradient_norm)
-        torch.nn.utils.clip_grad_norm(feature.parameters(), cfg.max_gradient_norm)
-
-        if cfg.model_type=='INDP': torch.nn.utils.clip_grad_norm(indp.parameters(), cfg.max_gradient_norm)
-        elif cfg.model_type=='CRF': torch.nn.utils.clip_grad_norm(crf.parameters(), cfg.max_gradient_norm)
+        torch.nn.utils.clip_grad_norm(encoder.params, cfg.max_gradient_norm)
+        torch.nn.utils.clip_grad_norm(feature.params, cfg.max_gradient_norm)
+        if cfg.model_type=='INDP': torch.nn.utils.clip_grad_norm(indp.params, cfg.max_gradient_norm)
+        elif cfg.model_type=='CRF': torch.nn.utils.clip_grad_norm(crf.params, cfg.max_gradient_norm)
+        elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
+            torch.nn.utils.clip_grad_norm(mldecoder.params, cfg.max_gradient_norm)
+            torch.nn.utils.clip_grad_norm(rltrain.cr_params, cfg.max_gradient_norm)
         else:
-            torch.nn.utils.clip_grad_norm(mldecoder.parameters(), cfg.max_gradient_norm)
+            torch.nn.utils.clip_grad_norm(mldecoder.params, cfg.max_gradient_norm)
 
         feature.opt.step()
         encoder.opt.step()
@@ -237,11 +238,11 @@ def predict(cfg, o_file):
     encoder.eval()
     if cfg.model_type=='INDP': indp.eval()
     elif cfg.model_type=='CRF': crf.eval()
+    elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
+        rltrain.eval()
     else:
         mldecoder.eval()
-        if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
-            rltrain.eval()
-
+    
     #file stream to save predictions
     f = open(o_file, 'w')
     for batch in load_data(cfg):

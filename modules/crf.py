@@ -35,8 +35,9 @@ class CRF(nn.Module):
         self.transitions = nn.Parameter(torch.Tensor(cfg.tag_size, cfg.tag_size), requires_grad=True)
 
         self.param_init()
-        params = ifilter(lambda p: p.requires_grad, self.parameters())
-        self.opt = optim.Adam(params, lr=cfg.learning_rate)
+
+        self.params = ifilter(lambda p: p.requires_grad, self.parameters())
+        self.opt = optim.Adam(self.params, lr=cfg.learning_rate)
         return
 
     def param_init(self):

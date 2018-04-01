@@ -36,12 +36,13 @@ class Feature(nn.Module):
 
         self.param_init()
         self.embeddings()
-        params = ifilter(lambda p: p.requires_grad, self.parameters())
+
+        self.params = ifilter(lambda p: p.requires_grad, self.parameters())
         if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
             #Only for RL-training.
-            self.opt = optim.SGD(params, lr=cfg.rl_step_size)
+            self.opt = optim.SGD(self.params, lr=cfg.rl_step_size)
         else:
-            self.opt = optim.Adam(params, lr=cfg.learning_rate)
+            self.opt = optim.Adam(self.params, lr=cfg.learning_rate)
         return
 
     def param_init(self):

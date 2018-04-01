@@ -8,11 +8,11 @@ def load_embeddings(cfg):
     cfg.data = {}
 
     #Defining some constants. Change this part if you want.
-    cfg.unk = 'uunnkknnuu'
-    cfg.dig = 'ddiiggiidd'
-    cfg.time = 'ttiimmeemmiitt'
-    cfg.date = 'ddaatteettaadd'
-    cfg.w_pad = 'ppaaddaapp'
+    cfg.unk = 'UNK'
+    cfg.dig = 'DIGIT'
+    cfg.time = 'TIME'
+    cfg.date = 'DATE'
+    cfg.w_pad = 'PAD'
 
     #Loads the starter word vectors.
     print "INFO: Loading word embeddings!"
@@ -52,7 +52,7 @@ def load_embeddings(cfg):
                 chars.append(ch)
 
     #Pad should be the last.
-    cfg.ch_pad = 'ppaaddaapp'
+    cfg.ch_pad = 'PAD'
     chars.append(cfg.ch_pad)
 
     cfg.ch_size = len(chars)
@@ -77,11 +77,11 @@ def load_embeddings(cfg):
             if len(tag)!=0: #for empty line!
                 tags.append(tag)
 
-    cfg.rare = 'rraarreerraarr' #for rare tags
+    cfg.rare = 'RARE' #for rare tags
     tags.append(cfg.rare)
 
     #Pad should be the last.
-    cfg.tag_pad = 'ppaaddaapp'
+    cfg.tag_pad = 'PAD'
     tags.append(cfg.tag_pad)
 
     cfg.tag_size = len(tags)
@@ -143,7 +143,7 @@ def process_tag(cfg, tag):
     if tag in tag_id:
         return tag_id[tag]
 
-    print "INFO: Could not find the following tag and replaced it with 'rare': ", tag
+    print "INFO: Could not find the following tag and replaced it with 'RARE': ", tag
     return tag_id[cfg.rare]
 
 def process_chars(cfg, word):
@@ -163,8 +163,6 @@ def load_data(cfg):
     """ Loads train, dev or test data. """
     #We assume that we cannot read the whole data into memory at once.
     #We do not need the whole data, we read batches of the data.
-    #The training data will be shuffled. Pseudo shuffling inside the batch.
-    #The dev/test data is not shuffled.
 
     #static batch size
     sb_size = cfg.batch_size
@@ -225,9 +223,6 @@ def load_data(cfg):
 
 def process_batch(cfg, batch):
     mode = cfg.local_mode
-
-    #Shuffle the batch only for the training data.
-    if mode=='train': shuffle(batch)
 
     hasY = True
     if mode=='test': hasY = False
@@ -344,6 +339,7 @@ def pad(cfg, B):
     #Dynamically select max sentence and word length for the current batch.
     B['max_s_len'] = max(B['s_len'])
     B['max_w_len'] = max(B['w_len'])
+
     #Pad w with w_pad_id
     for sentence in B['w']:
         pad_lst = [cfg.w_pad_id] * (B['max_s_len']-len(sentence))
