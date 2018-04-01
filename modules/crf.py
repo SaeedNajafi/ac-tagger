@@ -53,30 +53,32 @@ class CRF(nn.Module):
 
     def numerator_score(self, scores):
         cfg = self.cfg
-
+	emissions = scores.permute(1,0,2)
         w_mask = Variable(cfg.B['w_mask'].cuda()) if hasCuda else Variable(cfg.B['w_mask'])
         tag = Variable(cfg.B['tag'].cuda()) if hasCuda else Variable(cfg.B['tag'])
+	tags = tag.permute(1,0)
+	mask = w_mask.permute(1,0)
 
         #numerator score
-        num_score = self.start_transitions[tag[:,0]]
+        num_score = self.start_transitions[tags[0]]
         for i in range(cfg.max_s_len-1):
-            cur_tag, next_tag = tag[:,i], tag[:,i+1]
+            cur_tag, next_tag = tags[i], tags[i+1]
             #Emission score for current tag
-            num_score += scores[:,i,:].gather(1, cur_tag.view(-1, 1)).squeeze(1) * w_mask[:,i]
+            num_score += emissions[i].gather(1, cur_tag.view(-1, 1)).squeeze(1) * mask[i]
             #Transition score to next tag
             transition_score = self.transitions[cur_tag, next_tag]
             #Only add transition score if the next tag is not masked (mask == 1)
-            num_score += transition_score * w_mask[:,i+1]
+            num_score += transition_score * mask[i+1]
 
         s_len = Variable(cfg.B['s_len'].cuda()) if hasCuda else Variable(cfg.B['s_len'])
         last_tag_indices = s_len - 1
-        last_tags = tag.gather(1, last_tag_indices.view(-1, 1)).squeeze(1)
+        last_tags = tags.gather(1, last_tag_indices.view(-1, 1)).squeeze(1)
 
         #End transition score
         num_score += self.end_transitions[last_tags]
 
         #Emission score for the last tag (time step), if mask is valid (mask == 1)
-        num_score += scores[:,-1,:].gather(1, last_tags.view(-1, 1)).squeeze(1) * w_mask[:,-1,:]
+        num_score += emissions[-1].gather(1, last_tags.view(-1, 1)).squeeze(1) * mask[-1]
 
         #numerator score
         return num_score
@@ -84,10 +86,12 @@ class CRF(nn.Module):
     def partition_score(self, scores):
         #http://www.cs.columbia.edu/~mcollins/fb.pdf
         cfg = self.cfg
+	emissions = scores.permute(1,0,2)
         w_mask = Variable(cfg.B['w_mask'].cuda()) if hasCuda else Variable(cfg.B['w_mask'])
+	mask = w_mask.permute(1,0)
 
         #Start transition score and first emission
-        log_prob = self.start_transitions.view(1, -1) + scores[:,0,:]
+        log_prob = self.start_transitions.view(1, -1) + emissions[0]
         #Here, log_prob has size (batch_size, num_tags) where for each batch,
         #the j-th column stores the log probability that the current timestep has tag j
 
@@ -97,7 +101,7 @@ class CRF(nn.Module):
             #Broadcast transition score over all instances in the batch
             broadcast_transitions = self.transitions.unsqueeze(0)  # (1, num_tags, num_tags)
             #Broadcast emission score over all possible current tags
-            broadcast_emissions = emissions[:,i,:].unsqueeze(1)  # (batch_size, 1, num_tags)
+            broadcast_emissions = emissions[i].unsqueeze(1)  # (batch_size, 1, num_tags)
             #Sum current log probability, transition, and emission scores
             score = broadcast_log_prob + broadcast_transitions + broadcast_emissions  #(batch_size, num_tags, num_tags)
             #Sum over all possible current tags, but we're in log prob space, so a sum
@@ -105,7 +109,7 @@ class CRF(nn.Module):
             score = self.log_sum_exp(score, 1)  # (batch_size, num_tags)
             #Set log_prob to the score if this timestep is valid (mask == 1), otherwise
             #leave it alone
-            log_prob = score * w_mask[:,i].unsqueeze(1) + log_prob * (1.0 - mask[:,i]).unsqueeze(1)
+            log_prob = score * mask[i].unsqueeze(1) + log_prob * (1.0 - mask[i]).unsqueeze(1)
 
         #End transition score
         log_prob += self.end_transitions.view(1, -1)
