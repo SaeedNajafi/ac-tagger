@@ -136,7 +136,7 @@ class CRF(nn.Module):
         seq_length = s_len.data
 
         best_tags = []
-        for i range(cfg.d_batch_size):
+        for i in range(cfg.d_batch_size):
             emission = emissions[i]
             seq_length_i = seq_length[i]
             best_tags.append(self.viterbi_decode(emission[0:seq_length_i]))
