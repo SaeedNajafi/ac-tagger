@@ -12,31 +12,31 @@ class Configuration(object):
     max_epochs = 128
     early_stopping = 10
     batch_size = 32
-    seed = 111
+    seed = 125
 
-    #task = 'en_NER'
-    task = 'de_NER'
+    task = 'en_NER'
+    #task = 'de_NER'
     #task = 'POS'
     #task = 'CCG'
 
     """path to different files"""
-    w_dic = './data/de_embeddings/' + 'ge_word_dic.txt'
-    w_vector = './data/de_embeddings/' + 'ge_word_vector.txt'
+    w_dic = './data/en_embeddings/' + 'glove.100.dic.txt'
+    w_vector = './data/en_embeddings/' + 'glove.100.vectors.txt'
 
-    ch_dic = './data/de_ner_data/' + 'de.ner.chars'
-    tag_dic = './data/de_ner_data/' + 'de.ner.tags'
-    train_raw = './data/de_ner_data/' + 'de.ner.train.raw'
-    train_ref = './data/de_ner_data/' + 'de.ner.train.ref'
-    dev_raw = './data/de_ner_data/' + 'de.ner.dev.raw'
-    dev_ref = './data/de_ner_data/' + 'de.ner.dev.ref'
+    ch_dic = './data/en_ner_data/' + 'en.ner.chars'
+    tag_dic = './data/en_ner_data/' + 'en.ner.tags'
+    train_raw = './data/en_ner_data/' + 'ner.train.raw'
+    train_ref = './data/en_ner_data/' + 'ner.train.ref'
+    dev_raw = './data/en_ner_data/' + 'ner.dev.raw'
+    dev_ref = './data/en_ner_data/' + 'ner.dev.ref'
 
 
     """ Model Type """
     #Independent prediction of the tags.
-    model_type = 'INDP'
+    #model_type = 'INDP'
 
     #Conditional Random Field
-    #model_type = 'CRF'
+    model_type = 'CRF'
 
     #Decoder RNN trained only with teacher forcing
     #model_type = 'TF-RNN'

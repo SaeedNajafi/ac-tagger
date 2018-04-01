@@ -6,6 +6,7 @@ from modules.encoder import Encoder
 from modules.mldecoder import MLDecoder
 from modules.indp import INDP
 from modules.rltrain import RLTrain
+from modules.crf import CRF
 from random import shuffle
 import random
 import re
@@ -35,6 +36,8 @@ def batch_to_tensors(cfg, in_B):
     o_B['w_chs'] = torch.LongTensor(in_B['w_chs'])
     o_B['w_cap'] = torch.LongTensor(in_B['w_cap'])
     o_B['w_mask'] = torch.FloatTensor(in_B['w_mask'])
+    o_B['s_len'] = torch.LongTensor(in_B['s_len'])
+
     if in_B['tag'] is not None:
         o_B['tag'] = torch.LongTensor(in_B['tag'])
     else:
@@ -251,8 +254,7 @@ def predict(cfg, o_file):
         if cfg.model_type=='INDP':
             preds = indp.predict(H)[0].cpu().data.numpy()
         elif cfg.model_type=='CRF':
-            print "Not implemented"
-            exit()
+            preds = crf.predict(H)[0].cpu().data.numpy()
         else:
             if cfg.search=='greedy':
                 preds = mldecoder.greedy(H)[0].cpu().data.numpy()
@@ -296,8 +298,8 @@ def run_model(mode, path, in_file, o_file):
         if hasCuda: indp.cuda()
 
     elif cfg.model_type=='CRF':
-        print "Not implemented"
-        exit()
+        crf = CRF(cfg)
+        if hasCuda: crf.cuda()
 
     elif cfg.model_type=='TF-RNN':
         mldecoder = MLDecoder(cfg)
@@ -367,6 +369,7 @@ def run_model(mode, path, in_file, o_file):
                 torch.save(feature.state_dict(), path + cfg.model_type + '_feature')
                 torch.save(encoder.state_dict(), path + cfg.model_type + '_encoder')
                 if cfg.model_type=='INDP': torch.save(indp.state_dict(), path + cfg.model_type + '_predictor')
+                elif cfg.model_type=='CRF': torch.save(crf.state_dict(), path + cfg.model_type + '_predictor')
                 elif cfg.model_type=='TF-RNN' or cfg.model_type=='SS-RNN' or cfg.model_type=='DS-RNN':
                     torch.save(mldecoder.state_dict(), path + cfg.model_type + '_predictor')
                 elif cfg.model_type=='BR-RNN' or cfg.model_type=='AC-RNN':
@@ -387,6 +390,7 @@ def run_model(mode, path, in_file, o_file):
         feature.load_state_dict(torch.load(path + cfg.model_type + '_feature'))
         encoder.load_state_dict(torch.load(path + cfg.model_type + '_encoder'))
         if cfg.model_type=='INDP': indp.load_state_dict(torch.load(path + cfg.model_type + '_predictor'))
+        elif cfg.model_type=='CRF': crf.load_state_dict(torch.load(path + cfg.model_type + '_predictor'))
         elif cfg.model_type=='TF-RNN' or cfg.model_type=='SS-RNN' or cfg.model_type=='DS-RNN':
             mldecoder.load_state_dict(torch.load(path + cfg.model_type + '_predictor'))
         elif cfg.model_type=='BR-RNN' or cfg.model_type=='AC-RNN':
