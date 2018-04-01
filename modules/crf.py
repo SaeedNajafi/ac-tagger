@@ -143,7 +143,7 @@ class CRF(nn.Module):
 
         return best_tags
 
-    def viterbi_decode(self, emission: torch.FloatTensor) -> List[int]:
+    def viterbi_decode(self, emission):
         seq_length = emission.size(0)
 
         #Start transition
@@ -190,7 +190,7 @@ class CRF(nn.Module):
         return best_tags
 
     @staticmethod
-    def log_sum_exp(tensor: Variable, dim: int) -> Variable:
+    def log_sum_exp(tensor, dim):
         #Find the max value along `dim`
         offset, _ = tensor.max(dim)
         #Make offset broadcastable
