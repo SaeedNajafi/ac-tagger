@@ -66,7 +66,7 @@ class CRF(nn.Module):
         for i in range(cfg.max_s_len-1):
             cur_tag, next_tag = tags[i], tags[i+1]
             #Emission score for current tag
-            num_score += emissions[i].gather(1, cur_tag.view(-1, 1)).squeeze(1) * mask[i]
+            num_score += emissions[i].gather(1, cur_tag.contiguous().view(-1, 1)).squeeze(1) * mask[i]
             #Transition score to next tag
             transition_score = self.transitions[cur_tag, next_tag]
             #Only add transition score if the next tag is not masked (mask == 1)
