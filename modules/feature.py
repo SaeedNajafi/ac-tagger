@@ -45,9 +45,10 @@ class Feature(nn.Module):
         return
 
     def reset_adam(self):
+        cfg = self.cfg
         self.opt = optim.Adam(self.params, lr=cfg.learning_rate)
         return
-    
+
     def param_init(self):
         for name, param in self.named_parameters():
             if 'bias' in name:
