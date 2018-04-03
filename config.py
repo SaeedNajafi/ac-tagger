@@ -10,8 +10,8 @@ class Configuration(object):
     rl_step_size = 0.05
     max_gradient_norm = 5.
     max_epochs = 128
-    early_stopping = 5
-    batch_size = 10
+    early_stopping = 10
+    batch_size = 32
     seed = 125
 
     task = 'en_NER'

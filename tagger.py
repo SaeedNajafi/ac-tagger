@@ -155,8 +155,8 @@ def run_epoch(cfg):
         elif cfg.model_type=='CRF':
             crf.opt.zero_grad()
         elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
-                rltrain.opt.zero_grad()
-                rltrain.critic_opt.zero_grad()
+            rltrain.opt.zero_grad()
+            rltrain.critic_opt.zero_grad()
         else:
             mldecoder.opt.zero_grad()
 
@@ -361,10 +361,10 @@ def run_model(mode, path, in_file, o_file):
 
             start = time.time()
             run_epoch(cfg)
-            print '\nValidation:'
+            print 'Validation:'
             predict(cfg, o_file)
             val_cost = 100 - evaluate(cfg, cfg.dev_ref, o_file)
-            print '\nValidation score:{}'.format(100 - val_cost)
+            print 'Validation score:{}'.format(100 - val_cost)
             if val_cost < best_val_cost:
                 best_val_cost = val_cost
                 best_val_epoch = epoch
@@ -378,6 +378,15 @@ def run_model(mode, path, in_file, o_file):
                     torch.save(mldecoder.state_dict(), path + cfg.model_type + '_predictor')
                     torch.save(rltrain.state_dict(), path + cfg.model_type + '_critic')
 
+            #reset adam
+            if epoch - best_val_epoch > 2:
+                feature.reset_adam()
+                encoder.reset_adam()
+                if cfg.model_type=='INDP': indp.reset_adam()
+                elif cfg.model_type=='CRF': crf.reset_adam()
+                elif cfg.model_type=='TF-RNN' or cfg.model_type=='SS-RNN' or cfg.model_type=='DS-RNN':
+                    mldecoder.reset_adam()
+            
             #For early stopping
             if epoch - best_val_epoch > cfg.early_stopping:
                 break
