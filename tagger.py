@@ -361,7 +361,7 @@ def run_model(mode, path, in_file, o_file):
 
             start = time.time()
             run_epoch(cfg)
-            print 'Validation:'
+            print '\nValidation:'
             predict(cfg, o_file)
             val_cost = 100 - evaluate(cfg, cfg.dev_ref, o_file)
             print 'Validation score:{}'.format(100 - val_cost)
@@ -386,7 +386,7 @@ def run_model(mode, path, in_file, o_file):
                 elif cfg.model_type=='CRF': crf.reset_adam()
                 elif cfg.model_type=='TF-RNN' or cfg.model_type=='SS-RNN' or cfg.model_type=='DS-RNN':
                     mldecoder.reset_adam()
-            
+
             #For early stopping
             if epoch - best_val_epoch > cfg.early_stopping:
                 break
