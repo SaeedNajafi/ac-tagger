@@ -378,14 +378,15 @@ def run_model(mode, path, in_file, o_file):
                     torch.save(mldecoder.state_dict(), path + cfg.model_type + '_predictor')
                     torch.save(rltrain.state_dict(), path + cfg.model_type + '_critic')
 
-            #reset adam
-            if epoch - best_val_epoch > 1:
-                feature.reset_adam()
-                encoder.reset_adam()
-                if cfg.model_type=='INDP': indp.reset_adam()
-                elif cfg.model_type=='CRF': crf.reset_adam()
-                elif cfg.model_type=='TF-RNN' or cfg.model_type=='SS-RNN' or cfg.model_type=='DS-RNN':
-                    mldecoder.reset_adam()
+            #reset adam for ML training.
+            if cfg.model_type!='BR-RNN' and cfg.model_type!='AC-RNN':
+                if epoch - best_val_epoch > 1:
+                    feature.reset_adam()
+                    encoder.reset_adam()
+                    if cfg.model_type=='INDP': indp.reset_adam()
+                    elif cfg.model_type=='CRF': crf.reset_adam()
+                    elif cfg.model_type=='TF-RNN' or cfg.model_type=='SS-RNN' or cfg.model_type=='DS-RNN':
+                        mldecoder.reset_adam()
 
             #For early stopping
             if epoch - best_val_epoch > cfg.early_stopping:
