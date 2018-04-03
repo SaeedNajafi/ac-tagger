@@ -42,6 +42,7 @@ class CRF(nn.Module):
 
     def reset_adam(self):
         cfg = self.cfg
+        self.params = ifilter(lambda p: p.requires_grad, self.parameters())
         self.opt = optim.Adam(self.params, lr=cfg.learning_rate)
         return
 

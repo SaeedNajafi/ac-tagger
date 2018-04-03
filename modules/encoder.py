@@ -44,7 +44,7 @@ class Encoder(nn.Module):
         self.params = ifilter(lambda p: p.requires_grad, self.parameters())
         if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
             #Only for RL-training.
-            self.opt = optim.SGD(self.params, lr=cfg.rl_step_size)
+            self.opt = optim.SGD(self.params, lr=cfg.actor_step_size)
         else:
             self.opt = optim.Adam(self.params, lr=cfg.learning_rate)
 
@@ -53,6 +53,7 @@ class Encoder(nn.Module):
 
     def reset_adam(self):
         cfg = self.cfg
+        self.params = ifilter(lambda p: p.requires_grad, self.parameters())
         self.opt = optim.Adam(self.params, lr=cfg.learning_rate)
         return
 
