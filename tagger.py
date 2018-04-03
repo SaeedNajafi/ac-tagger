@@ -379,7 +379,7 @@ def run_model(mode, path, in_file, o_file):
                     torch.save(rltrain.state_dict(), path + cfg.model_type + '_critic')
 
             #reset adam
-            if epoch - best_val_epoch > 2:
+            if epoch - best_val_epoch > 1:
                 feature.reset_adam()
                 encoder.reset_adam()
                 if cfg.model_type=='INDP': indp.reset_adam()

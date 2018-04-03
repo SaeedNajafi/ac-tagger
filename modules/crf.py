@@ -41,6 +41,7 @@ class CRF(nn.Module):
         return
 
     def reset_adam(self):
+        cfg = self.cfg
         self.opt = optim.Adam(self.params, lr=cfg.learning_rate)
         return
 
