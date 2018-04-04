@@ -62,6 +62,9 @@ class Configuration(object):
     #gamma = 0.9
     #n_step = 4
 
+    #Decoder RNN trained with Risk Minimization.
+    #model_type = 'RM-RNN'
+
     #For inference in decoder RNNs, we have greedy search or beam search.
     #Specify the beam size.
     #search = 'greedy'
