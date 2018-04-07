@@ -8,7 +8,7 @@ from modules.indp import INDP
 from modules.rltrain import RLTrain
 from modules.crf import CRF
 from random import shuffle
-from itertools import filter
+from itertools import ifilter
 import torch
 import torch.optim as optim
 import numpy as np
@@ -303,54 +303,54 @@ def run_model(mode, path, in_file, o_file):
     #Construct models
     feature = Feature(cfg)
     if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN' or cfg.model_type=='RM-RNN':
-        f_opt = optim.SGD(filter(lambda p: p.requires_grad, feature.parameters()), lr=cfg.learning_rate)
+        f_opt = optim.SGD(ifilter(lambda p: p.requires_grad, feature.parameters()), lr=cfg.learning_rate)
     else:
-        f_opt = optim.Adam(filter(lambda p: p.requires_grad, feature.parameters()), lr=cfg.learning_rate)
+        f_opt = optim.Adam(ifilter(lambda p: p.requires_grad, feature.parameters()), lr=cfg.learning_rate)
 
     if hasCuda: feature.cuda()
 
     encoder = Encoder(cfg)
     if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN' or cfg.model_type=='RM-RNN':
-        e_opt = optim.SGD(filter(lambda p: p.requires_grad, encoder.parameters()), lr=cfg.learning_rate)
+        e_opt = optim.SGD(ifilter(lambda p: p.requires_grad, encoder.parameters()), lr=cfg.learning_rate)
     else:
-        e_opt = optim.Adam(filter(lambda p: p.requires_grad, encoder.parameters()), lr=cfg.learning_rate)
+        e_opt = optim.Adam(ifilter(lambda p: p.requires_grad, encoder.parameters()), lr=cfg.learning_rate)
     if hasCuda: encoder.cuda()
 
     if cfg.model_type=='INDP':
         indp = INDP(cfg)
-        i_opt = optim.Adam(filter(lambda p: p.requires_grad, indp.parameters()), lr=cfg.learning_rate)
+        i_opt = optim.Adam(ifilter(lambda p: p.requires_grad, indp.parameters()), lr=cfg.learning_rate)
         if hasCuda: indp.cuda()
 
     elif cfg.model_type=='CRF':
         crf = CRF(cfg)
-        c_opt = optim.Adam(filter(lambda p: p.requires_grad, crf.parameters()), lr=cfg.learning_rate)
+        c_opt = optim.Adam(ifilter(lambda p: p.requires_grad, crf.parameters()), lr=cfg.learning_rate)
         if hasCuda: crf.cuda()
 
     elif cfg.model_type=='TF-RNN':
         mldecoder = MLDecoder(cfg)
-        m_opt = optim.Adam(filter(lambda p: p.requires_grad, mldecoder.parameters()), lr=cfg.learning_rate)
+        m_opt = optim.Adam(ifilter(lambda p: p.requires_grad, mldecoder.parameters()), lr=cfg.learning_rate)
         if hasCuda: mldecoder.cuda()
         cfg.mldecoder_type = 'TF'
 
     elif cfg.model_type=='SS-RNN':
         mldecoder = MLDecoder(cfg)
-        m_opt = optim.Adam(filter(lambda p: p.requires_grad, mldecoder.parameters()), lr=cfg.learning_rate)
+        m_opt = optim.Adam(ifilter(lambda p: p.requires_grad, mldecoder.parameters()), lr=cfg.learning_rate)
         if hasCuda: mldecoder.cuda()
         cfg.mldecoder_type = 'SS'
 
     elif cfg.model_type=='DS-RNN':
         mldecoder = MLDecoder(cfg)
-        m_opt = optim.Adam(filter(lambda p: p.requires_grad, mldecoder.parameters()), lr=cfg.learning_rate)
+        m_opt = optim.Adam(ifilter(lambda p: p.requires_grad, mldecoder.parameters()), lr=cfg.learning_rate)
         if hasCuda: mldecoder.cuda()
         cfg.mldecoder_type = 'DS'
 
     elif cfg.model_type=='BR-RNN':
         mldecoder = MLDecoder(cfg)
-        m_opt = optim.SGD(filter(lambda p: p.requires_grad, mldecoder.parameters()), lr=cfg.learning_rate)
+        m_opt = optim.SGD(ifilter(lambda p: p.requires_grad, mldecoder.parameters()), lr=cfg.learning_rate)
         if hasCuda: mldecoder.cuda()
         cfg.mldecoder_type = 'TF'
         rltrain = RLTrain(cfg)
-        r_opt = optim.SGD(filter(lambda p: p.requires_grad, rltrain.parameters()), lr=cfg.learning_rate)
+        r_opt = optim.SGD(ifilter(lambda p: p.requires_grad, rltrain.parameters()), lr=cfg.learning_rate)
         if hasCuda: rltrain.cuda()
         cfg.rltrain_type = 'BR'
         #For RL, the network should be pre-trained with teacher forced ML decoder.
@@ -360,11 +360,11 @@ def run_model(mode, path, in_file, o_file):
 
     elif cfg.model_type=='AC-RNN':
         mldecoder = MLDecoder(cfg)
-        m_opt = optim.SGD(filter(lambda p: p.requires_grad, mldecoder.parameters()), lr=cfg.learning_rate)
+        m_opt = optim.SGD(ifilter(lambda p: p.requires_grad, mldecoder.parameters()), lr=cfg.learning_rate)
         if hasCuda: mldecoder.cuda()
         cfg.mldecoder_type = 'TF'
         rltrain = RLTrain(cfg)
-        r_opt = optim.SGD(filter(lambda p: p.requires_grad, rltrain.parameters()), lr=cfg.learning_rate)
+        r_opt = optim.SGD(ifilter(lambda p: p.requires_grad, rltrain.parameters()), lr=cfg.learning_rate)
         if hasCuda: rltrain.cuda()
         cfg.rltrain_type = 'AC'
         #For RL, the network should be pre-trained with teacher forced ML decoder.
@@ -375,11 +375,11 @@ def run_model(mode, path, in_file, o_file):
 
     elif cfg.model_type=='RM-RNN':
         mldecoder = MLDecoder(cfg)
-        m_opt = optim.SGD(filter(lambda p: p.requires_grad, mldecoder.parameters()), lr=cfg.learning_rate)
+        m_opt = optim.SGD(ifilter(lambda p: p.requires_grad, mldecoder.parameters()), lr=cfg.learning_rate)
         if hasCuda: mldecoder.cuda()
         cfg.mldecoder_type = 'TF'
         rltrain = RLTrain(cfg)
-        r_opt = optim.SGD(filter(lambda p: p.requires_grad, rltrain.parameters()), lr=cfg.learning_rate)
+        r_opt = optim.SGD(ifilter(lambda p: p.requires_grad, rltrain.parameters()), lr=cfg.learning_rate)
         if hasCuda: rltrain.cuda()
         cfg.rltrain_type = 'RM'
         #For RM, the network should be pre-trained with teacher forced ML decoder.
