@@ -4,7 +4,6 @@ import numpy as np
 import torch.nn as nn
 from torch.nn import init
 from torch.autograd import Variable
-import torch.optim as optim
 
 hasCuda = torch.cuda.is_available()
 
@@ -17,12 +16,11 @@ class RLTrain(nn.Module):
         3- 'RM': Risk Minimization
     """
 
-    def __init__(self, cfg, mldecoder):
+    def __init__(self, cfg):
         super(RLTrain, self).__init__()
 
         self.cfg = cfg
-        self.mldecoder = mldecoder
-
+        
         #Critic:
         self.cr_size = cfg.w_rnn_units + cfg.dec_rnn_units
 
@@ -44,13 +42,6 @@ class RLTrain(nn.Module):
                             bias=True
                             )
         self.param_init()
-
-        #For RL, we always use SGD.
-        self.opt = optim.SGD(mldecoder.parameters(), lr=cfg.actor_step_size)
-
-        self.cr_params = ifilter(lambda p: p.requires_grad, self.parameters())
-
-        self.critic_opt = optim.SGD(self.cr_params, lr=cfg.critic_step_size, weight_decay=0.001)
 
         return
 
@@ -107,11 +98,11 @@ class RLTrain(nn.Module):
         #MSEloss will be plugged in a separate optimizer.
         return MSEloss
 
-    def forward(self, H):
+    def forward(self, H, mldecoder):
         cfg = self.cfg
-        dec_rnn = self.mldecoder.dec_rnn
-        affine = self.mldecoder.affine
-        tag_em = self.mldecoder.tag_em
+        dec_rnn = mldecoder.dec_rnn
+        affine = mldecoder.affine
+        tag_em = mldecoder.tag_em
 
         #zero the pad vector
         tag_em.weight.data[cfg.tag_pad_id].fill_(0.0)
@@ -133,10 +124,11 @@ class RLTrain(nn.Module):
             if i==0:
                 prev_output = Go_symbol
                 h = h0
+                c = h0
 
             input = torch.cat((prev_output, H_i), dim=1)
 
-            output = dec_rnn(input, h)
+            output, c = dec_rnn(input, (h, c))
 
             output_H = torch.cat((output, H_i), dim=1)
 
@@ -240,6 +232,9 @@ class RLTrain(nn.Module):
         cfg = self.cfg
         l = cfg.gamma
         n = cfg.n_step
+        if n<0:
+            print "INFO: 1 <= n step !"
+            exit()
 
         #Building gamma matrix to calculate return for each step.
         powers = np.arange(cfg.max_s_len)

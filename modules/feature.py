@@ -4,7 +4,6 @@ import numpy as np
 from torch.autograd import Variable
 import torch.nn as nn
 from torch.nn import init
-import torch.optim as optim
 
 hasCuda = torch.cuda.is_available()
 
@@ -19,13 +18,13 @@ class Feature(nn.Module):
         super(Feature, self).__init__()
 
         self.cfg = cfg
-        self.fw_ch_rnn = nn.GRUCell(
+        self.fw_ch_rnn = nn.LSTMCell(
                             input_size=cfg.ch_em_size,
                             hidden_size=cfg.ch_rnn_units,
                             bias=True
                             )
 
-        self.bw_ch_rnn = nn.GRUCell(
+        self.bw_ch_rnn = nn.LSTMCell(
                             input_size=cfg.ch_em_size,
                             hidden_size=cfg.ch_rnn_units,
                             bias=True
@@ -36,53 +35,29 @@ class Feature(nn.Module):
         self.param_init()
         self.embeddings()
 
-        self.params = ifilter(lambda p: p.requires_grad, self.parameters())
-        if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN' or cfg.model_type=='RM-RNN':
-            #Only for RL-training.
-            self.opt = optim.SGD(self.params, lr=cfg.actor_step_size)
-        else:
-            self.opt = optim.Adam(self.params, lr=cfg.learning_rate)
-        return
-
-    def reset_adam(self):
-        cfg = self.cfg
-        self.params = ifilter(lambda p: p.requires_grad, self.parameters())
-        self.opt = optim.Adam(self.params, lr=cfg.learning_rate)
-        return
-
     def param_init(self):
         for name, param in self.named_parameters():
             if 'bias' in name:
                 init.constant(param, 0.0)
             if 'weight' in name:
                 init.xavier_uniform(param)
-
-        """
-        Fills the input Tensor or Variable with a (semi) orthogonal matrix,
-        as described in "Exact solutions to the nonlinear dynamics of learning
-        in deep linear neural networks"
-        """
-        #Only for RNN weights
-        for name, param in self.fw_ch_rnn.named_parameters():
-            if 'weight' in name:
-                init.orthogonal(param)
-
-        for name, param in self.bw_ch_rnn.named_parameters():
-            if 'weight' in name:
-                init.orthogonal(param)
-
         return
 
     def embeddings(self):
         """Add embedding layer that maps from ids to vectors."""
         cfg = self.cfg
-
-
+        cap_tensor = torch.FloatTensor([
+                    [1.0, 0.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0],
+                    [0.0, 0.0, 0.0, 0.0]
+        ])
         #We have 4 kinds of Capitalization patterns + 1 cap pad id.
-        cfg.cap_em_size = cfg.ch_em_size
+        cfg.cap_em_size = 4
         self.cap_em = nn.Embedding(5, cfg.cap_em_size)
-        self.cap_em.weight.data[cfg.cap_pad_id].fill_(0)
-        self.cap_em.weight.requires_grad = True
+        self.cap_em.weight.data = cap_tensor
+        self.cap_em.weight.requires_grad = False
 
         w_lt = torch.FloatTensor(cfg.data['w_v']) #word lookup table
         self.w_em = nn.Embedding(cfg.w_size, cfg.w_em_size)
@@ -101,7 +76,6 @@ class Feature(nn.Module):
         cfg = self.cfg
 
         #zero the pad id vectors
-        self.cap_em.weight.data[cfg.cap_pad_id].fill_(0.0)
         self.ch_em.weight.data[cfg.ch_pad_id].fill_(0.0)
         self.w_em.weight.data[cfg.w_pad_id].fill_(0.0)
 
@@ -122,8 +96,10 @@ class Feature(nn.Module):
         ch_ems = self.ch_em(ch)
         fw_outputs = []
         for i in range(cfg.max_w_len):
-            if i==0: fwh = h0
-            fwh = self.fw_ch_rnn(ch_ems[:,i,:], fwh)
+            if i==0:
+                fwh = h0
+                fwc = h0
+            fwh, fwc = self.fw_ch_rnn(ch_ems[:,i,:], (fwh, fwc))
             fw_outputs.append(fwh)
 
         fw_ch_h = torch.stack(fw_outputs, dim=1)
@@ -139,8 +115,10 @@ class Feature(nn.Module):
         rev_ch_ems = self.ch_em(rev_ch)
         bw_outputs = []
         for i in range(cfg.max_w_len):
-            if i==0: bwh = h0
-            bwh = self.bw_ch_rnn(rev_ch_ems[:,i,:], bwh)
+            if i==0:
+                bwh = h0
+                bwc = h0
+            bwh, bwc = self.bw_ch_rnn(rev_ch_ems[:,i,:], (bwh, bwc))
             bw_outputs.append(bwh)
 
 
@@ -157,5 +135,6 @@ class Feature(nn.Module):
         Words = self.w_em(w)
         Caps = self.cap_em(w_cap)
 
-        features = torch.cat((Prefixes_masked, Words, Suffixes_masked, Caps), 2)
-        return features
+        features = torch.cat((Prefixes_masked, Suffixes_masked, Words), 2)
+        features_dr = self.drop(features)
+        return torch.cat((features_dr, Caps), 2)

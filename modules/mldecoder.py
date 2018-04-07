@@ -4,7 +4,6 @@ import numpy as np
 import torch.nn as nn
 from torch.nn import init
 from torch.autograd import Variable
-import torch.optim as optim
 
 hasCuda = torch.cuda.is_available()
 
@@ -24,7 +23,7 @@ class MLDecoder(nn.Module):
 
         #Size of input feature vectors
         in_size = cfg.w_rnn_units + cfg.tag_em_size
-        self.dec_rnn = nn.GRUCell(
+        self.dec_rnn = nn.LSTMCell(
                             input_size=in_size,
                             hidden_size=cfg.dec_rnn_units,
                             bias=True
@@ -42,15 +41,6 @@ class MLDecoder(nn.Module):
         self.param_init()
         self.embeddings()
 
-        self.params = ifilter(lambda p: p.requires_grad, self.parameters())
-        self.opt = optim.Adam(self.params, lr=cfg.learning_rate)
-
-        return
-
-    def reset_adam(self):
-        cfg = self.cfg
-        self.params = ifilter(lambda p: p.requires_grad, self.parameters())
-        self.opt = optim.Adam(self.params, lr=cfg.learning_rate)
         return
 
     def param_init(self):
@@ -59,17 +49,6 @@ class MLDecoder(nn.Module):
                 init.constant(param, 0.0)
             if 'weight' in name:
                 init.xavier_uniform(param)
-
-        """
-        Fills the input Tensor or Variable with a (semi) orthogonal matrix,
-        as described in "Exact solutions to the nonlinear dynamics of learning
-        in deep linear neural networks"
-        """
-        #Only for RNN weights
-        for name, param in self.dec_rnn.named_parameters():
-            if 'weight' in name:
-                init.orthogonal(param)
-
         return
 
     def embeddings(self):
@@ -124,11 +103,11 @@ class MLDecoder(nn.Module):
             if i==0:
                 prev_output = Go_symbol
                 h = h0
+                c = h0
 
             input = torch.cat((prev_output, Hi), dim=1)
-            input_dr = self.drop(input)
 
-            output = self.dec_rnn(input_dr, h)
+            output, c = self.dec_rnn(input, (h, c))
 
             output_dr = self.drop(output)
             output_dr_H = torch.cat((output_dr, Hi), dim=1)
@@ -158,7 +137,7 @@ class MLDecoder(nn.Module):
         #we will use the generated previous tag.
         switch = torch.ge(flip_coin, sp).float()
 
-        sw = Variable(switch.cuda()) if hasCuda else Variable(switch)
+        sw = Variable(switch.cuda(), requires_grad=False) if hasCuda else Variable(switch, requires_grad=False)
         sw_expanded = sw.view(-1, cfg.max_s_len, 1).expand(-1, cfg.max_s_len, cfg.tag_em_size)
 
         #zero the pad vector
@@ -181,11 +160,11 @@ class MLDecoder(nn.Module):
             if i==0:
                 prev_output = Go_symbol
                 h = h0
+                c = h0
 
             input = torch.cat((prev_output, Hi), dim=1)
-            input_dr = self.drop(input)
 
-            output = self.dec_rnn(input_dr, h)
+            output, c = self.dec_rnn(input, (h, c))
 
             output_dr = self.drop(output)
             output_dr_H = torch.cat((output_dr, Hi), dim=1)
@@ -200,7 +179,7 @@ class MLDecoder(nn.Module):
             _, gen_idx = nn.functional.softmax(score, dim=1).max(dim=1)
             generated_prev_output = self.tag_em(gen_idx)
             sw_expanded_i = sw_expanded[:,i,:]
-            prev_output = sw_expanded_i * generated_prev_output + (1-sw_expanded_i) * gold_prev_output
+            prev_output = sw_expanded_i * generated_prev_output + (1.0-sw_expanded_i) * gold_prev_output
 
         #Return log_probs
         return nn.functional.log_softmax(torch.stack(Scores, dim=1), dim=2)
@@ -222,7 +201,7 @@ class MLDecoder(nn.Module):
         #we will use the generated previous tag.
         switch = torch.ge(flip_coin, sp).float()
 
-        sw = Variable(switch.cuda()) if hasCuda else Variable(switch)
+        sw = Variable(switch.cuda(), requires_grad=False) if hasCuda else Variable(switch, requires_grad=False)
         sw_expanded = sw.view(-1, cfg.max_s_len, 1).expand(-1, cfg.max_s_len, cfg.tag_em_size)
 
         #zero the pad vector
@@ -245,11 +224,11 @@ class MLDecoder(nn.Module):
             if i==0:
                 prev_output = Go_symbol
                 h = h0
+                c = h0
 
             input = torch.cat((prev_output, Hi), dim=1)
-            input_dr = self.drop(input)
 
-            output = self.dec_rnn(input_dr, h)
+            output, c = self.dec_rnn(input, (h, c))
 
             output_dr = self.drop(output)
             output_dr_H = torch.cat((output_dr, Hi), dim=1)
@@ -267,7 +246,7 @@ class MLDecoder(nn.Module):
             #Weighted average of all tag embeddings biased strongly towards the greedy best tag.
             generated_prev_output = torch.mm(averaging_weights, self.tag_em.weight)
             sw_expanded_i = sw_expanded[:,i,:]
-            prev_output = sw_expanded_i * generated_prev_output + (1-sw_expanded_i) * gold_prev_output
+            prev_output = sw_expanded_i * generated_prev_output + (1.0-sw_expanded_i) * gold_prev_output
 
         #Return log_probs
         return nn.functional.log_softmax(torch.stack(Scores, dim=1), dim=2)
@@ -302,10 +281,11 @@ class MLDecoder(nn.Module):
             if i==0:
                 prev_output = Go_symbol
                 h = h0
+                c = h0
 
             input = torch.cat((prev_output, H_i), dim=1)
 
-            output = self.dec_rnn(input, h)
+            output, c = self.dec_rnn(input, (h, c))
 
             output_H = torch.cat((output, H_i), dim=1)
             score = self.affine(output_H)
@@ -326,12 +306,15 @@ class MLDecoder(nn.Module):
         cfg = self.cfg
         beamsize = cfg.beamsize
 
+        w_mask = Variable(cfg.B['w_mask'].cuda()) if hasCuda else Variable(cfg.B['w_mask'])
+
         #zero the pad vector
         self.tag_em.weight.data[cfg.tag_pad_id].fill_(0.0)
 
         #Create a variable for initial hidden vector of RNN.
         zeros = torch.zeros(cfg.d_batch_size, cfg.dec_rnn_units)
         h0 = Variable(zeros.cuda()) if hasCuda else Variable(zeros)
+        c0 = Variable(zeros.cuda()) if hasCuda else Variable(zeros)
 
         #Create a variable for the initial previous tag.
         zeros = torch.zeros(cfg.d_batch_size, cfg.tag_em_size)
@@ -346,12 +329,16 @@ class MLDecoder(nn.Module):
         h_candidates = torch.zeros(cfg.d_batch_size, beamsize, cfg.dec_rnn_units)
         h_c = Variable(h_candidates.cuda()) if hasCuda else Variable(h_candidates)
 
+        c_candidates = torch.zeros(cfg.d_batch_size, beamsize, cfg.dec_rnn_units)
+        c_c = Variable(c_candidates.cuda()) if hasCuda else Variable(c_candidates)
+
         beam = []
         for i in range(cfg.max_s_len):
             Hi = H[:,i,:]
+            maski = w_mask[:,i]
             if i==0:
                 input = torch.cat((Go_symbol, Hi), dim=1)
-                output = self.dec_rnn(input, h0)
+                output, cc = self.dec_rnn(input, (h0, c0))
                 output_H = torch.cat((output, Hi), dim=1)
                 score = self.affine(output_H)
                 log_prob = nn.functional.log_softmax(score, dim=1)
@@ -359,6 +346,8 @@ class MLDecoder(nn.Module):
 
                 #For the next time step.
                 h = torch.stack([output] * beamsize, dim=1)
+                c = torch.stack([cc] * beamsize, dim=1)
+
                 prev_tag = kidx
                 prev_lprob = kprob
 
@@ -366,15 +355,16 @@ class MLDecoder(nn.Module):
                 prev_output = self.tag_em(prev_tag)
                 for b in range(beamsize):
                     input = torch.cat((prev_output[:,b,:], Hi), dim=1)
-                    output = self.dec_rnn(input, h[:,b,:])
+                    output, cc = self.dec_rnn(input, (h[:,b,:], c[:,b,:]))
                     output_H = torch.cat((output, Hi), dim=1)
                     score = self.affine(output_H)
                     log_prob = nn.functional.log_softmax(score, dim=1)
                     kprob, kidx = torch.topk(log_prob, beamsize, dim=1, largest=True, sorted=True)
                     h_c.data[:,b,:] = output.data
+                    c_c.data[:,b,:] = cc.data
 
                     for bb in range(beamsize):
-                        lprob_c.data[:,beamsize*b + bb] = (prev_lprob[:,b] + kprob[:,bb]).data
+                        lprob_c.data[:,beamsize*b + bb] = (prev_lprob[:,b].data + kprob[:,bb].data * maski.data)
                         tag_c.data[:,beamsize*b + bb] = kidx[:,bb].data
 
                 prev_lprob, maxidx = torch.topk(lprob_c, beamsize, dim=1, largest=True, sorted=True)
@@ -397,6 +387,7 @@ class MLDecoder(nn.Module):
                 beam.append(old_tag)
                 prev_tag = new_tag
                 h = torch.gather(h_c, 1, which_old_ids.view(-1, beamsize, 1).expand(-1, beamsize, cfg.dec_rnn_units))
+                c = torch.gather(c_c, 1, which_old_ids.view(-1, beamsize, 1).expand(-1, beamsize, cfg.dec_rnn_units))
 
 
         beam.append(new_tag)

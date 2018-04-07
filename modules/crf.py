@@ -4,7 +4,6 @@ import numpy as np
 import torch.nn as nn
 from torch.nn import init
 from torch.autograd import Variable
-import torch.optim as optim
 
 hasCuda = torch.cuda.is_available()
 
@@ -35,17 +34,7 @@ class CRF(nn.Module):
         self.transitions = nn.Parameter(torch.Tensor(cfg.tag_size, cfg.tag_size), requires_grad=True)
 
         self.param_init()
-
-        self.params = ifilter(lambda p: p.requires_grad, self.parameters())
-        self.opt = optim.Adam(self.params, lr=cfg.learning_rate)
         return
-
-    def reset_adam(self):
-        cfg = self.cfg
-        self.params = ifilter(lambda p: p.requires_grad, self.parameters())
-        self.opt = optim.Adam(self.params, lr=cfg.learning_rate)
-        return
-
 
     def param_init(self):
         for name, param in self.named_parameters():
@@ -54,9 +43,9 @@ class CRF(nn.Module):
             if 'weight' in name:
                 init.xavier_uniform(param)
 
-        init.uniform(self.start_transitions, -0.1, 0.1)
-        init.uniform(self.end_transitions, -0.1, 0.1)
-        init.uniform(self.transitions, -0.1, 0.1)
+        init.xavier_uniform(self.start_transitions)
+        init.xavier_uniform(self.end_transitions)
+        init.xavier_uniform(self.transitions)
         return
 
     def numerator_score(self, scores):
