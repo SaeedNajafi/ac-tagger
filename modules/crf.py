@@ -43,9 +43,9 @@ class CRF(nn.Module):
             if 'weight' in name:
                 init.xavier_uniform(param)
 
-        init.kaiming_uniform(self.start_transitions, a=0, mode='fan_in')
-        init.kaiming_uniform(self.end_transitions, a=0, mode='fan_in')
-        init.xavier_uniform(self.transitions)
+        init.uniform(self.start_transitions, a=-1, b=1)
+        init.uniform(self.end_transitions, a=-1, b=1)
+        init.uniform(self.transitions, a=-1, b=1)
         return
 
     def numerator_score(self, scores):
