@@ -10,17 +10,16 @@ hasCuda = torch.cuda.is_available()
 class RLTrain(nn.Module):
     """
     This module applies RL training to the decoder RNN.
-    It has 2 variants plus a risk minimization version:
+    It has 2 variants:
         1- 'BR': Reinforce with baseline
         2- 'AC': Actor-critic
-        3- 'RM': Risk Minimization
     """
 
     def __init__(self, cfg):
         super(RLTrain, self).__init__()
 
         self.cfg = cfg
-        
+
         #Critic:
         self.cr_size = cfg.w_rnn_units + cfg.dec_rnn_units
 
@@ -150,8 +149,7 @@ class RLTrain(nn.Module):
         action_log_policies = torch.stack(action_log_policies, dim=1)
 
         type = cfg.rltrain_type
-        if type=='RM':
-            return self.Risk(taken_actions, action_log_policies)
+
         if type=='BR':
             return self.REINFORCE(V_es, taken_actions, action_log_policies)
         elif type=='AC':
@@ -205,29 +203,7 @@ class RLTrain(nn.Module):
         rlloss = -torch.mean(torch.mean(action_log_policies * deltas * w_mask, dim=1), dim=0)
         vloss = self.V_loss(Returns, V_es)
         return rlloss, vloss
-
-
-    def Risk(self, taken_actions, action_log_policies):
-        cfg = self.cfg
-        l = cfg.gamma
-
-        tag = Variable(cfg.B['tag'].cuda()) if hasCuda else Variable(cfg.B['tag'])
-        w_mask = Variable(cfg.B['w_mask'].cuda()) if hasCuda else Variable(cfg.B['w_mask'])
-
-        is_true_tag = torch.eq(taken_actions, tag)
-        #0/1 reward (hamming loss) for each prediction.
-        rewards = is_true_tag.float() * w_mask
-
-        #risks 1.0 for correct prediction, -1.0 for wrong prediction.
-        risks = 2.0 * rewards - 1.0
-        if hasCuda:
-            Risks = Variable(risks.data.cuda(), requires_grad=False)
-        else:
-            Risks = Variable(risks.data, requires_grad=False)
-
-        rlloss = -torch.mean(torch.mean(action_log_policies * Risks * w_mask, dim=1), dim=0)
-        return rlloss, None
-
+        
     def Actor_Critic(self, V_es, taken_actions, action_log_policies):
         cfg = self.cfg
         l = cfg.gamma

@@ -148,7 +148,7 @@ def run_epoch(cfg):
     elif cfg.model_type=='CRF': crf.train()
     else:
         mldecoder.train()
-        if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN' or cfg.model_type=='RM-RNN':
+        if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
             rltrain.train()
 
     batches = [batch for batch in load_data(cfg)]
@@ -164,7 +164,7 @@ def run_epoch(cfg):
             i_opt.zero_grad()
         elif cfg.model_type=='CRF':
             c_opt.zero_grad()
-        elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN' or cfg.model_type=='RM-RNN':
+        elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
             r_opt.zero_grad()
             m_opt.zero_grad()
         else:
@@ -179,7 +179,7 @@ def run_epoch(cfg):
         elif cfg.model_type=='CRF':
             log_probs = crf(H)
             loss = crf.loss(log_probs)
-        elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN' or cfg.model_type=='RM-RNN':
+        elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
             loss, vloss = rltrain(H, mldecoder)
         else:
             log_probs = mldecoder(H)
@@ -192,7 +192,7 @@ def run_epoch(cfg):
         torch.nn.utils.clip_grad_norm(feature.parameters(), cfg.max_gradient_norm)
         if cfg.model_type=='INDP': torch.nn.utils.clip_grad_norm(indp.parameters(), cfg.max_gradient_norm)
         elif cfg.model_type=='CRF': torch.nn.utils.clip_grad_norm(crf.parameters(), cfg.max_gradient_norm)
-        elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN' or cfg.model_type=='RM-RNN':
+        elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
             torch.nn.utils.clip_grad_norm(mldecoder.parameters(), cfg.max_gradient_norm)
         else:
             torch.nn.utils.clip_grad_norm(mldecoder.parameters(), cfg.max_gradient_norm)
@@ -203,7 +203,7 @@ def run_epoch(cfg):
             i_opt.step()
         elif cfg.model_type=='CRF':
             c_opt.step()
-        elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN' or cfg.model_type=='RM-RNN':
+        elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
             r_opt.step()
             m_opt.step()
         else:
@@ -247,7 +247,7 @@ def predict(cfg, o_file):
     encoder.eval()
     if cfg.model_type=='INDP': indp.eval()
     elif cfg.model_type=='CRF': crf.eval()
-    elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN' or cfg.model_type=='RM-RNN':
+    elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
         rltrain.eval()
         mldecoder.eval()
     else:
@@ -301,7 +301,7 @@ def run_model(mode, path, in_file, o_file):
 
     #Construct models
     feature = Feature(cfg)
-    if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN' or cfg.model_type=='RM-RNN':
+    if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
         f_opt = optim.SGD(ifilter(lambda p: p.requires_grad, feature.parameters()), lr=cfg.actor_step_size)
     else:
         f_opt = optim.Adam(ifilter(lambda p: p.requires_grad, feature.parameters()), lr=cfg.learning_rate)
@@ -309,7 +309,7 @@ def run_model(mode, path, in_file, o_file):
     if hasCuda: feature.cuda()
 
     encoder = Encoder(cfg)
-    if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN' or cfg.model_type=='RM-RNN':
+    if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN':
         e_opt = optim.SGD(ifilter(lambda p: p.requires_grad, encoder.parameters()), lr=cfg.actor_step_size)
     else:
         e_opt = optim.Adam(ifilter(lambda p: p.requires_grad, encoder.parameters()), lr=cfg.learning_rate)
@@ -371,21 +371,6 @@ def run_model(mode, path, in_file, o_file):
         encoder.load_state_dict(torch.load(path + 'TF-RNN' + '_encoder'))
         mldecoder.load_state_dict(torch.load(path + 'TF-RNN' + '_predictor'))
 
-
-    elif cfg.model_type=='RM-RNN':
-        mldecoder = MLDecoder(cfg)
-        m_opt = optim.SGD(ifilter(lambda p: p.requires_grad, mldecoder.parameters()), lr=cfg.actor_step_size)
-        if hasCuda: mldecoder.cuda()
-        cfg.mldecoder_type = 'TF'
-        rltrain = RLTrain(cfg)
-        r_opt = optim.Adam(ifilter(lambda p: p.requires_grad, rltrain.parameters()), lr=cfg.learning_rate)
-        if hasCuda: rltrain.cuda()
-        cfg.rltrain_type = 'RM'
-        #For RM, the network should be pre-trained with teacher forced ML decoder.
-        feature.load_state_dict(torch.load(path + 'TF-RNN' + '_feature'))
-        encoder.load_state_dict(torch.load(path + 'TF-RNN' + '_encoder'))
-        mldecoder.load_state_dict(torch.load(path + 'TF-RNN' + '_predictor'))
-
     if mode=='train':
         o_file = './temp.predicted'
         best_val_cost = float('inf')
@@ -419,7 +404,7 @@ def run_model(mode, path, in_file, o_file):
                 elif cfg.model_type=='CRF': torch.save(crf.state_dict(), path + cfg.model_type + '_predictor')
                 elif cfg.model_type=='TF-RNN' or cfg.model_type=='SS-RNN' or cfg.model_type=='DS-RNN':
                     torch.save(mldecoder.state_dict(), path + cfg.model_type + '_predictor')
-                elif cfg.model_type=='BR-RNN' or cfg.model_type=='AC-RNN' or cfg.model_type=='RM-RNN':
+                elif cfg.model_type=='BR-RNN' or cfg.model_type=='AC-RNN':
                     torch.save(mldecoder.state_dict(), path + cfg.model_type + '_predictor')
                     torch.save(rltrain.state_dict(), path + cfg.model_type + '_critic')
 
@@ -440,7 +425,7 @@ def run_model(mode, path, in_file, o_file):
         elif cfg.model_type=='CRF': crf.load_state_dict(torch.load(path + cfg.model_type + '_predictor'))
         elif cfg.model_type=='TF-RNN' or cfg.model_type=='SS-RNN' or cfg.model_type=='DS-RNN':
             mldecoder.load_state_dict(torch.load(path + cfg.model_type + '_predictor'))
-        elif cfg.model_type=='BR-RNN' or cfg.model_type=='AC-RNN' or cfg.model_type=='RM-RNN':
+        elif cfg.model_type=='BR-RNN' or cfg.model_type=='AC-RNN':
             mldecoder.load_state_dict(torch.load(path + cfg.model_type + '_predictor'))
             rltrain.load_state_dict(torch.load(path + cfg.model_type + '_critic'))
 

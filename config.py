@@ -7,7 +7,7 @@ class Configuration(object):
     dec_rnn_units = 200
     dropout = 0.5
     learning_rate = 0.0005
-    actor_step_size = 0.05
+    actor_step_size = 0.5
     max_gradient_norm = 5.
     max_epochs = 128
     early_stopping = 10
@@ -60,9 +60,6 @@ class Configuration(object):
     #For RL, you need to specify gamma and n-step.
     #gamma = 0.9
     #n_step = 4
-
-    #Decoder RNN trained with Risk Minimization.
-    #model_type = 'RM-RNN'
 
     #For inference in decoder RNNs, we have greedy search or beam search.
     #Specify the beam size.
