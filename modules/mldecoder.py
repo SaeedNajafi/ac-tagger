@@ -335,7 +335,6 @@ class MLDecoder(nn.Module):
         beam = []
         for i in range(cfg.max_s_len):
             Hi = H[:,i,:]
-            maski = w_mask[:,i]
             if i==0:
                 input = torch.cat((Go_symbol, Hi), dim=1)
                 output, cc = self.dec_rnn(input, (h0, c0))
@@ -364,11 +363,10 @@ class MLDecoder(nn.Module):
                     c_c.data[:,b,:] = cc.data
 
                     for bb in range(beamsize):
-                        lprob_c.data[:,beamsize*b + bb] = (prev_lprob[:,b].data + kprob[:,bb].data * maski.data)
+                        lprob_c.data[:,beamsize*b + bb] = (prev_lprob[:,b].data + kprob[:,bb].data)
                         tag_c.data[:,beamsize*b + bb] = kidx[:,bb].data
 
                 prev_lprob, maxidx = torch.topk(lprob_c, beamsize, dim=1, largest=True, sorted=True)
-
                 """
                     which_old_ids is a trick:
                     For example in beamsize=4, maxidx can take values 0-15.
@@ -384,11 +382,12 @@ class MLDecoder(nn.Module):
                 which_old_ids = torch.remainder(maxidx, beamsize).long()
                 new_tag = torch.gather(tag_c, 1, maxidx)
                 old_tag = torch.gather(prev_tag, 1, which_old_ids)
+                maski_expanded = w_mask[:,i].view(-1,1).expand(-1, beamsize)
+                old_tag = maski_expanded * old_tag + (1.0-maski_expanded) * prev_tag
                 beam.append(old_tag)
                 prev_tag = new_tag
                 h = torch.gather(h_c, 1, which_old_ids.view(-1, beamsize, 1).expand(-1, beamsize, cfg.dec_rnn_units))
                 c = torch.gather(c_c, 1, which_old_ids.view(-1, beamsize, 1).expand(-1, beamsize, cfg.dec_rnn_units))
-
 
         beam.append(new_tag)
         preds = torch.stack(beam, dim=2)
