@@ -7,6 +7,7 @@ class Configuration(object):
     dec_rnn_units = 200
     dropout = 0.5
     learning_rate = 0.0005
+    actor_step_size = 0.05
     max_gradient_norm = 5.
     max_epochs = 128
     early_stopping = 10

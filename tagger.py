@@ -194,7 +194,6 @@ def run_epoch(cfg):
         elif cfg.model_type=='CRF': torch.nn.utils.clip_grad_norm(crf.parameters(), cfg.max_gradient_norm)
         elif cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN' or cfg.model_type=='RM-RNN':
             torch.nn.utils.clip_grad_norm(mldecoder.parameters(), cfg.max_gradient_norm)
-            torch.nn.utils.clip_grad_norm(rltrain.parameters(), cfg.max_gradient_norm)
         else:
             torch.nn.utils.clip_grad_norm(mldecoder.parameters(), cfg.max_gradient_norm)
 
@@ -303,7 +302,7 @@ def run_model(mode, path, in_file, o_file):
     #Construct models
     feature = Feature(cfg)
     if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN' or cfg.model_type=='RM-RNN':
-        f_opt = optim.SGD(ifilter(lambda p: p.requires_grad, feature.parameters()), lr=cfg.learning_rate)
+        f_opt = optim.SGD(ifilter(lambda p: p.requires_grad, feature.parameters()), lr=cfg.actor_step_size)
     else:
         f_opt = optim.Adam(ifilter(lambda p: p.requires_grad, feature.parameters()), lr=cfg.learning_rate)
 
@@ -311,7 +310,7 @@ def run_model(mode, path, in_file, o_file):
 
     encoder = Encoder(cfg)
     if cfg.model_type=='AC-RNN' or cfg.model_type=='BR-RNN' or cfg.model_type=='RM-RNN':
-        e_opt = optim.SGD(ifilter(lambda p: p.requires_grad, encoder.parameters()), lr=cfg.learning_rate)
+        e_opt = optim.SGD(ifilter(lambda p: p.requires_grad, encoder.parameters()), lr=cfg.actor_step_size)
     else:
         e_opt = optim.Adam(ifilter(lambda p: p.requires_grad, encoder.parameters()), lr=cfg.learning_rate)
     if hasCuda: encoder.cuda()
@@ -346,11 +345,11 @@ def run_model(mode, path, in_file, o_file):
 
     elif cfg.model_type=='BR-RNN':
         mldecoder = MLDecoder(cfg)
-        m_opt = optim.SGD(ifilter(lambda p: p.requires_grad, mldecoder.parameters()), lr=cfg.learning_rate)
+        m_opt = optim.SGD(ifilter(lambda p: p.requires_grad, mldecoder.parameters()), lr=cfg.actor_step_size)
         if hasCuda: mldecoder.cuda()
         cfg.mldecoder_type = 'TF'
         rltrain = RLTrain(cfg)
-        r_opt = optim.SGD(ifilter(lambda p: p.requires_grad, rltrain.parameters()), lr=cfg.learning_rate)
+        r_opt = optim.Adam(ifilter(lambda p: p.requires_grad, rltrain.parameters()), lr=cfg.learning_rate)
         if hasCuda: rltrain.cuda()
         cfg.rltrain_type = 'BR'
         #For RL, the network should be pre-trained with teacher forced ML decoder.
@@ -360,11 +359,11 @@ def run_model(mode, path, in_file, o_file):
 
     elif cfg.model_type=='AC-RNN':
         mldecoder = MLDecoder(cfg)
-        m_opt = optim.SGD(ifilter(lambda p: p.requires_grad, mldecoder.parameters()), lr=cfg.learning_rate)
+        m_opt = optim.SGD(ifilter(lambda p: p.requires_grad, mldecoder.parameters()), lr=cfg.actor_step_size)
         if hasCuda: mldecoder.cuda()
         cfg.mldecoder_type = 'TF'
         rltrain = RLTrain(cfg)
-        r_opt = optim.SGD(ifilter(lambda p: p.requires_grad, rltrain.parameters()), lr=cfg.learning_rate)
+        r_opt = optim.Adam(ifilter(lambda p: p.requires_grad, rltrain.parameters()), lr=cfg.learning_rate)
         if hasCuda: rltrain.cuda()
         cfg.rltrain_type = 'AC'
         #For RL, the network should be pre-trained with teacher forced ML decoder.
@@ -375,11 +374,11 @@ def run_model(mode, path, in_file, o_file):
 
     elif cfg.model_type=='RM-RNN':
         mldecoder = MLDecoder(cfg)
-        m_opt = optim.SGD(ifilter(lambda p: p.requires_grad, mldecoder.parameters()), lr=cfg.learning_rate)
+        m_opt = optim.SGD(ifilter(lambda p: p.requires_grad, mldecoder.parameters()), lr=cfg.actor_step_size)
         if hasCuda: mldecoder.cuda()
         cfg.mldecoder_type = 'TF'
         rltrain = RLTrain(cfg)
-        r_opt = optim.SGD(ifilter(lambda p: p.requires_grad, rltrain.parameters()), lr=cfg.learning_rate)
+        r_opt = optim.Adam(ifilter(lambda p: p.requires_grad, rltrain.parameters()), lr=cfg.learning_rate)
         if hasCuda: rltrain.cuda()
         cfg.rltrain_type = 'RM'
         #For RM, the network should be pre-trained with teacher forced ML decoder.
