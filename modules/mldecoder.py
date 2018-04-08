@@ -382,7 +382,7 @@ class MLDecoder(nn.Module):
                 which_old_ids = torch.remainder(maxidx, beamsize).long()
                 new_tag = torch.gather(tag_c, 1, maxidx)
                 old_tag = torch.gather(prev_tag, 1, which_old_ids)
-                maski_expanded = w_mask[:,i].view(-1,1).expand(-1, beamsize)
+                maski_expanded = w_mask[:,i].contiguous().view(-1,1).expand(-1, beamsize).long()
                 old_tag = maski_expanded * old_tag + (1.0-maski_expanded) * prev_tag
                 beam.append(old_tag)
                 prev_tag = new_tag
