@@ -384,7 +384,7 @@ class MLDecoder(nn.Module):
                         beam_candidates.append(torch.cat((beam[:,b], tag_c[:, beamsize*b + bb].contiguous().view(-1, 1)), 1))
 
                     for bb in range(1, beamsize):
-                        lprob_c.data[:,beamsize*b + bb] = (lprob_c[:, beamsize*b + bb] + hasEnd_i[:,b] * V_Neg).data
+                        lprob_c.data[:,beamsize*b + bb] = (lprob_c[:, beamsize*b + bb] + (1.0-hasEnd_i[:,b]) * V_Neg).data
 
                 _, maxidx = torch.topk(lprob_c, beamsize, dim=1, largest=True, sorted=True)
 
