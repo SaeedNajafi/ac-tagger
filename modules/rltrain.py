@@ -203,7 +203,7 @@ class RLTrain(nn.Module):
         rlloss = -torch.mean(torch.mean(action_log_policies * deltas * w_mask, dim=1), dim=0)
         vloss = self.V_loss(Returns, V_es)
         return rlloss, vloss
-        
+
     def Actor_Critic(self, V_es, taken_actions, action_log_policies):
         cfg = self.cfg
         l = cfg.gamma

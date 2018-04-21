@@ -1,10 +1,10 @@
 class Configuration(object):
     """Model hyperparams and data information"""
-    w_rnn_units = 200
-    ch_rnn_units = 25
-    ch_em_size = 25
-    tag_em_size = 25
-    dec_rnn_units = 200
+    w_rnn_units = 256
+    ch_rnn_units = 32
+    ch_em_size = 32
+    tag_em_size = 32
+    dec_rnn_units = 256
     dropout = 0.5
     learning_rate = 0.0005
     actor_step_size = 0.5

@@ -2,6 +2,7 @@ import itertools
 import re
 import numpy as np
 from random import shuffle
+import codecs
 
 def load_embeddings(cfg):
     #This is where we will keep embeddings data.
@@ -17,7 +18,7 @@ def load_embeddings(cfg):
     #Loads the starter word vectors.
     print "INFO: Loading word embeddings!"
     word_vectors = np.loadtxt(cfg.w_vector, dtype=np.float32)
-    with open(cfg.w_dic) as fd:
+    with codecs.open(cfg.w_dic, 'r', 'utf-8') as fd:
         words = [line.strip() for line in fd]
 
     #Adding constants to words and word_vectors.
@@ -43,7 +44,7 @@ def load_embeddings(cfg):
 
     #Finds chars from words.
     print "INFO: Loading characters!"
-    with open(cfg.ch_dic) as fd:
+    with codecs.open(cfg.ch_dic, 'r', 'utf-8') as fd:
         chars = [line.strip() for line in fd]
 
     for w in words:
@@ -71,7 +72,7 @@ def load_embeddings(cfg):
     #Loads the tags
     print "INFO: Loading tags!"
     tags = []
-    with open(cfg.tag_dic, 'r') as fd:
+    with codecs.open(cfg.tag_dic, 'r', 'utf-8') as fd:
         for line in fd.readlines():
             tag = line.strip()
             if len(tag)!=0: #for empty line!
@@ -188,8 +189,8 @@ def load_data(cfg):
 
     batch = []
     counter = 0
-    fd_raw = open(f_raw, 'r')
-    if hasY: fd_ref = open(f_ref, 'r')
+    fd_raw = codec.open(f_raw, 'r', 'utf-8')
+    if hasY: fd_ref = codecs.open(f_ref, 'r', 'utf-8')
     x_buffer = []
     y_buffer = []
     for x_line in fd_raw:

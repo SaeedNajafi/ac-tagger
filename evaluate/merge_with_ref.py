@@ -1,10 +1,14 @@
 import sys
+import codecs
+
+reload(sys)
+sys.setdefaultencoding('utf-8')
 
 #Used for NER
 def merge(ref_file, pred_file, new_file):
-    merge_file = open(new_file, 'w')
-    ref_lines = open(ref_file, 'r').readlines()
-    pred_lines = open(pred_file, 'r').readlines()
+    merge_file = codecs.open(new_file, 'w', 'utf-8')
+    ref_lines = codecs.open(ref_file, 'r', 'utf-8').readlines()
+    pred_lines = codecs.open(pred_file, 'r', 'utf-8').readlines()
 
     if len(ref_lines)!=len(pred_lines):
         print "INFO: Wrong number of lines in reference and prediction files"

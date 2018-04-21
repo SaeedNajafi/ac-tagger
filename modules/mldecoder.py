@@ -320,77 +320,81 @@ class MLDecoder(nn.Module):
         zeros = torch.zeros(cfg.d_batch_size, cfg.tag_em_size)
         Go_symbol = Variable(zeros.cuda()) if hasCuda else Variable(zeros)
 
+        very_negative = torch.zeros(cfg.d_batch_size)
+        V_Neg = Variable(very_negative.cuda()) if hasCuda else Variable(very_negative)
+        V_Neg.data.fill_(-10**10)
+
+        pads = torch.zeros(cfg.d_batch_size).long()
+        Pads = Variable(pads.cuda()) if hasCuda else Variable(pads)
+        Pads.data.fill_(cfg.tag_pad_id)
+
         lprob_candidates = torch.zeros(cfg.d_batch_size, beamsize*beamsize)
         lprob_c = Variable(lprob_candidates.cuda()) if hasCuda else Variable(lprob_candidates)
 
         tag_candidates = torch.zeros(cfg.d_batch_size, beamsize*beamsize).long()
         tag_c = Variable(tag_candidates.cuda()) if hasCuda else Variable(tag_candidates)
 
-        h_candidates = torch.zeros(cfg.d_batch_size, beamsize, cfg.dec_rnn_units)
+        h_candidates = torch.zeros(cfg.d_batch_size, beamsize*beamsize, cfg.dec_rnn_units)
         h_c = Variable(h_candidates.cuda()) if hasCuda else Variable(h_candidates)
 
-        c_candidates = torch.zeros(cfg.d_batch_size, beamsize, cfg.dec_rnn_units)
+        c_candidates = torch.zeros(cfg.d_batch_size, beamsize*beamsize, cfg.dec_rnn_units)
         c_c = Variable(c_candidates.cuda()) if hasCuda else Variable(c_candidates)
 
         beam = []
         for i in range(cfg.max_s_len):
             Hi = H[:,i,:]
+            hasEnd_i = w_mask[:,i].view(-1, 1).expand(-1, beamsize) # 1 not finished, 0 finished.
             if i==0:
                 input = torch.cat((Go_symbol, Hi), dim=1)
-                output, cc = self.dec_rnn(input, (h0, c0))
+                output, temp_c = self.dec_rnn(input, (h0, c0))
                 output_H = torch.cat((output, Hi), dim=1)
                 score = self.affine(output_H)
                 log_prob = nn.functional.log_softmax(score, dim=1)
+                log_prob.data[:, cfg.tag_pad_id] = V_Neg.data #never select pad
                 kprob, kidx = torch.topk(log_prob, beamsize, dim=1, largest=True, sorted=True)
 
-                #For the next time step.
+                #For the time step > 1
                 h = torch.stack([output] * beamsize, dim=1)
-                c = torch.stack([cc] * beamsize, dim=1)
-
-                prev_tag = kidx
+                c = torch.stack([temp_c] * beamsize, dim=1)
+                prev_y = kidx
                 prev_lprob = kprob
+                beam = kidx.view(-1, beamsize, 1)
+
 
             else:
+                beam_candidates = []
                 prev_output = self.tag_em(prev_tag)
                 for b in range(beamsize):
                     input = torch.cat((prev_output[:,b,:], Hi), dim=1)
-                    output, cc = self.dec_rnn(input, (h[:,b,:], c[:,b,:]))
+                    output, temp_c = self.dec_rnn(input, (h[:,b,:], c[:,b,:]))
                     output_H = torch.cat((output, Hi), dim=1)
                     score = self.affine(output_H)
+
                     log_prob = nn.functional.log_softmax(score, dim=1)
+                    log_prob.data[:, cfg.tag_pad_id] = V_Neg.data #never select pad
+
                     kprob, kidx = torch.topk(log_prob, beamsize, dim=1, largest=True, sorted=True)
-                    h_c.data[:,b,:] = output.data
-                    c_c.data[:,b,:] = cc.data
 
                     for bb in range(beamsize):
-                        lprob_c.data[:,beamsize*b + bb] = (prev_lprob[:,b].data + kprob[:,bb].data)
-                        tag_c.data[:,beamsize*b + bb] = kidx[:,bb].data
+                        new_lprob = prev_lprob[:,b] + hasEnd_i[:,b] * kprob[:,bb]
+                        lprob_c.data[:, beamsize*b + bb] = new_lprob.data
+                        tag_c.data[:, beamsize*b + bb] = (hasEnd_i[:,b] * kidx[:,bb] + (1.0 - hasEnd_i[:,b]) * Pads).data
+                        h_c.data[:, beamsize*b + bb, :] = output.data
+                    	c_c.data[:, beamsize*b + bb, :] = temp_c.data
+                        beam_candidates.append(torch.cat((beam[:,b], tag_c[:, beamsize*b + bb].contiguous().view(-1, 1)), 1))
 
-                prev_lprob, maxidx = torch.topk(lprob_c, beamsize, dim=1, largest=True, sorted=True)
-                """
-                    which_old_ids is a trick:
-                    For example in beamsize=4, maxidx can take values 0-15.
-                    0-3 means in the previous time step, the tag of beam 0 was fed.
-                    4-7 means in the previous time step, the tag of beam 1 was fed.
-                    8-11 means in the previous time step, the tag of beam 2 was fed.
-                    12-15 means in the previous time step, the tag of beam 3 was fed.
-                    So maxidx//beamsize gives the beam number of previous time step.
-                    Now, in this time step, we are sure which previous tag/beam/hidden was used.
-                    So it should be saved. It is a backpointer saving while going
-                    forward!
-                """
-                which_old_ids = torch.remainder(maxidx, beamsize).long()
-                new_tag = torch.gather(tag_c, 1, maxidx)
-                old_tag = torch.gather(prev_tag, 1, which_old_ids)
-                maski_expanded = w_mask[:,i].contiguous().view(-1,1).expand(-1, beamsize).long()
-                old_tag = maski_expanded * old_tag + (1.0-maski_expanded) * prev_tag
-                beam.append(old_tag)
-                prev_tag = new_tag
-                h = torch.gather(h_c, 1, which_old_ids.view(-1, beamsize, 1).expand(-1, beamsize, cfg.dec_rnn_units))
-                c = torch.gather(c_c, 1, which_old_ids.view(-1, beamsize, 1).expand(-1, beamsize, cfg.dec_rnn_units))
+                    for bb in range(1, beamsize):
+                        lprob_c.data[:,beamsize*b + bb] = (lprob_c[:, beamsize*b + bb] + hasEnd_i[:,b] * V_Neg).data
 
-        beam.append(new_tag)
-        preds = torch.stack(beam, dim=2)
-        #!!Returning individual log probs is not implemented.!!
+                _, maxidx = torch.topk(lprob_c, beamsize, dim=1, largest=True, sorted=True)
+
+                beam = torch.gather(torch.stack(beam_candidates, dim=1), 1, maxidx.view(-1, beamsize, 1).expand(-1, beamsize, i+1))
+                prev_tag = torch.gather(tag_c, 1, maxidx)
+                prev_lprob = torch.gather(lprob_c, 1, maxidx)
+                h = torch.gather(h_c, 1, maxidx.view(-1, beamsize, 1).expand(-1, beamsize, cfg.h_units))
+                c = torch.gather(c_c, 1, maxidx.view(-1, beamsize, 1).expand(-1, beamsize, cfg.h_units))
+
+
+        preds = beam
         #preds is of size (batch size, beam size, max length)
         return preds, None

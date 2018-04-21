@@ -1,7 +1,11 @@
 import sys
+import codecs
 
-train_file = open(sys.argv[1], 'r')
-chars_file = open(sys.argv[2], 'w')
+reload(sys)
+sys.setdefaultencoding('utf-8')
+
+train_file = codecs.open(sys.argv[1], 'r', 'utf-8')
+chars_file = codecs.open(sys.argv[2], 'w', 'utf-8')
 
 chars = []
 

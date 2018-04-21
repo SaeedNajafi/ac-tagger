@@ -19,6 +19,9 @@ import sys
 import time
 import codecs
 
+reload(sys)
+sys.setdefaultencoding('utf-8')
+
 hasCuda = torch.cuda.is_available()
 
 #Global variables for modules.
@@ -84,6 +87,7 @@ def save_predictions(cfg, batch, preds, f):
                 gtag = batch['tag'][s_idx][w_idx]
                 gtag_str = cfg.data['id_tag'][gtag]
                 f.write(w + '\t' + gtag_str + '\t' + pred_str + '\n')
+
             else:
                 f.write(w + '\t' + pred_str + '\n')
 
@@ -99,8 +103,8 @@ def save_predictions(cfg, batch, preds, f):
 #Used to evaluate model's performance on the dev set w.r.t. top1 tagging accuracy.
 def accuracy(ref_file, pred_file):
     #Top1 Accuracy
-    ref_lines = open(ref_file, 'r').readlines()
-    pred_lines = open(pred_file, 'r').readlines()
+    ref_lines = codecs.open(ref_file, 'r', 'utf-8').readlines()
+    pred_lines = codecs.open(pred_file, 'r', 'utf-8').readlines()
 
     if len(ref_lines)!=len(pred_lines):
         print "INFO: Wrong number of lines in reference and prediction files"
@@ -124,8 +128,8 @@ def accuracy(ref_file, pred_file):
 
 #Only for NER.
 def fscore():
-    os.system("%s -d '\t' < %s > %s" % ('./evaluate/conlleval', 'temp.predicted', 'temp.score'))
-    result_lines = [line.rstrip() for line in codecs.open('temp.score', 'r', 'utf8')]
+    os.system("%s -d '\t' < %s > %s" % ('./evaluate/conlleval', 'temp.predicted_' + cfg.model_type, 'temp.score_' + cfg.model_type))
+    result_lines = [line.rstrip() for line in codecs.open('temp.score_' + cfg.model_type, 'r', 'utf-8')]
     return float(result_lines[1].strip().split()[-1])
 
 def evaluate(cfg, ref_file, pred_file):
@@ -254,7 +258,7 @@ def predict(cfg, o_file):
         mldecoder.eval()
 
     #file stream to save predictions
-    f = open(o_file, 'w')
+    f = codec.open(o_file, 'w', 'utf-8')
     for batch in load_data(cfg):
         cfg.d_batch_size = batch['d_batch_size']
         cfg.max_s_len = batch['max_s_len']
@@ -349,7 +353,7 @@ def run_model(mode, path, in_file, o_file):
         if hasCuda: mldecoder.cuda()
         cfg.mldecoder_type = 'TF'
         rltrain = RLTrain(cfg)
-        r_opt = optim.Adam(ifilter(lambda p: p.requires_grad, rltrain.parameters()), lr=cfg.learning_rate)
+        r_opt = optim.Adam(ifilter(lambda p: p.requires_grad, rltrain.parameters()), lr=cfg.learning_rate, weight_decay=0.001)
         if hasCuda: rltrain.cuda()
         cfg.rltrain_type = 'BR'
         #For RL, the network should be pre-trained with teacher forced ML decoder.
@@ -363,7 +367,7 @@ def run_model(mode, path, in_file, o_file):
         if hasCuda: mldecoder.cuda()
         cfg.mldecoder_type = 'TF'
         rltrain = RLTrain(cfg)
-        r_opt = optim.Adam(ifilter(lambda p: p.requires_grad, rltrain.parameters()), lr=cfg.learning_rate)
+        r_opt = optim.Adam(ifilter(lambda p: p.requires_grad, rltrain.parameters()), lr=cfg.learning_rate, weight_decay=0.001)
         if hasCuda: rltrain.cuda()
         cfg.rltrain_type = 'AC'
         #For RL, the network should be pre-trained with teacher forced ML decoder.
@@ -372,7 +376,7 @@ def run_model(mode, path, in_file, o_file):
         mldecoder.load_state_dict(torch.load(path + 'TF-RNN' + '_predictor'))
 
     if mode=='train':
-        o_file = './temp.predicted'
+        o_file = './temp.predicted_' + cfg.model_type
         best_val_cost = float('inf')
         best_val_epoch = 0
         first_start = time.time()
@@ -419,6 +423,7 @@ def run_model(mode, path, in_file, o_file):
         print 'Total training time:{} seconds'.format(time.time() - first_start)
 
     elif mode=='test':
+        cfg.batch_size = 512
         feature.load_state_dict(torch.load(path + cfg.model_type + '_feature'))
         encoder.load_state_dict(torch.load(path + cfg.model_type + '_encoder'))
         if cfg.model_type=='INDP': indp.load_state_dict(torch.load(path + cfg.model_type + '_predictor'))
