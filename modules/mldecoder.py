@@ -343,7 +343,7 @@ class MLDecoder(nn.Module):
         beam = []
         for i in range(cfg.max_s_len):
             Hi = H[:,i,:]
-            hasEnd_i = w_mask[:,i].view(-1, 1).expand(-1, beamsize) # 1 not finished, 0 finished.
+            hasEnd_i = w_mask[:,i].contiguous().view(-1, 1).expand(-1, beamsize) # 1 not finished, 0 finished.
             if i==0:
                 input = torch.cat((Go_symbol, Hi), dim=1)
                 output, temp_c = self.dec_rnn(input, (h0, c0))
@@ -356,7 +356,7 @@ class MLDecoder(nn.Module):
                 #For the time step > 1
                 h = torch.stack([output] * beamsize, dim=1)
                 c = torch.stack([temp_c] * beamsize, dim=1)
-                prev_y = kidx
+                prev_tag = kidx
                 prev_lprob = kprob
                 beam = kidx.view(-1, beamsize, 1)
 
@@ -378,7 +378,7 @@ class MLDecoder(nn.Module):
                     for bb in range(beamsize):
                         new_lprob = prev_lprob[:,b] + hasEnd_i[:,b] * kprob[:,bb]
                         lprob_c.data[:, beamsize*b + bb] = new_lprob.data
-                        tag_c.data[:, beamsize*b + bb] = (hasEnd_i[:,b] * kidx[:,bb] + (1.0 - hasEnd_i[:,b]) * Pads).data
+                        tag_c.data[:, beamsize*b + bb] = (hasEnd_i[:,b].long() * kidx[:,bb] + (1.0 - hasEnd_i[:,b].long()) * Pads).data
                         h_c.data[:, beamsize*b + bb, :] = output.data
                     	c_c.data[:, beamsize*b + bb, :] = temp_c.data
                         beam_candidates.append(torch.cat((beam[:,b], tag_c[:, beamsize*b + bb].contiguous().view(-1, 1)), 1))
@@ -391,8 +391,8 @@ class MLDecoder(nn.Module):
                 beam = torch.gather(torch.stack(beam_candidates, dim=1), 1, maxidx.view(-1, beamsize, 1).expand(-1, beamsize, i+1))
                 prev_tag = torch.gather(tag_c, 1, maxidx)
                 prev_lprob = torch.gather(lprob_c, 1, maxidx)
-                h = torch.gather(h_c, 1, maxidx.view(-1, beamsize, 1).expand(-1, beamsize, cfg.h_units))
-                c = torch.gather(c_c, 1, maxidx.view(-1, beamsize, 1).expand(-1, beamsize, cfg.h_units))
+                h = torch.gather(h_c, 1, maxidx.view(-1, beamsize, 1).expand(-1, beamsize, cfg.dec_rnn_units))
+                c = torch.gather(c_c, 1, maxidx.view(-1, beamsize, 1).expand(-1, beamsize, cfg.dec_rnn_units))
 
 
         preds = beam
