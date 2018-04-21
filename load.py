@@ -189,7 +189,7 @@ def load_data(cfg):
 
     batch = []
     counter = 0
-    fd_raw = codec.open(f_raw, 'r', 'utf-8')
+    fd_raw = codecs.open(f_raw, 'r', 'utf-8')
     if hasY: fd_ref = codecs.open(f_ref, 'r', 'utf-8')
     x_buffer = []
     y_buffer = []

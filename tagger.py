@@ -258,7 +258,7 @@ def predict(cfg, o_file):
         mldecoder.eval()
 
     #file stream to save predictions
-    f = codec.open(o_file, 'w', 'utf-8')
+    f = codecs.open(o_file, 'w', 'utf-8')
     for batch in load_data(cfg):
         cfg.d_batch_size = batch['d_batch_size']
         cfg.max_s_len = batch['max_s_len']
