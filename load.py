@@ -137,7 +137,7 @@ def process_word(cfg, word):
     elif re.search(r'\d', word):
         return w_id[cfg.dig]
 
-    print "INFO: Could not find the following word and replaced it with 'UNK': ", word
+    #print "INFO: Could not find the following word and replaced it with 'UNK': ", word
     return w_id[cfg.unk]
 
 def process_tag(cfg, tag):

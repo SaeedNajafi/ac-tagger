@@ -9,10 +9,7 @@ hasCuda = torch.cuda.is_available()
 
 class RLTrain(nn.Module):
     """
-    This module applies RL training to the decoder RNN.
-    It has 2 variants:
-        1- 'BR': Reinforce with baseline
-        2- 'AC': Actor-critic
+    This module applies biased actor-critic training to the decoder RNN.
     """
 
     def __init__(self, cfg):
@@ -79,7 +76,7 @@ class RLTrain(nn.Module):
     #L2 regularization will be done by optimizer.
     def V_loss(self, Returns, prev_V):
         """
-            Returns are the temporal difference or monte carlo returns calculated for
+            Returns are the temporal difference returns calculated for
             each step. They are the target regression values for the Critic V.
             prev_V is the previous estimates of the Critic V for the returns.
             We want to minimize the Mean Squared Error between Returns and prev_V.
@@ -150,9 +147,8 @@ class RLTrain(nn.Module):
 
         type = cfg.rltrain_type
 
-        if type=='BR':
-            return self.REINFORCE(V_es, taken_actions, action_log_policies)
-        elif type=='AC':
+
+        if type=='AC':
             return self.Actor_Critic(V_es, taken_actions, action_log_policies)
 
         else:
@@ -160,49 +156,6 @@ class RLTrain(nn.Module):
             exit()
 
         return None, None
-
-    def REINFORCE(self, V_es, taken_actions, action_log_policies):
-        cfg = self.cfg
-        l = cfg.gamma
-
-        #Building gamma matrix to calculate return for each step.
-        powers = np.arange(cfg.max_s_len)
-        bases = np.full((1,cfg.max_s_len), l)
-        rows = np.power(bases, powers)
-        inverse_rows = 1.0/rows
-        inverse_cols = inverse_rows.reshape((cfg.max_s_len,1))
-        gammaM = np.triu(np.multiply(inverse_cols, rows))
-        gM_tensor = torch.from_numpy(gammaM.T).float()
-        if hasCuda:
-            gM = Variable(gM_tensor.cuda(), requires_grad=False)
-        else:
-            gM = Variable(gM_tensor, requires_grad=False)
-
-        tag = Variable(cfg.B['tag'].cuda()) if hasCuda else Variable(cfg.B['tag'])
-        w_mask = Variable(cfg.B['w_mask'].cuda()) if hasCuda else Variable(cfg.B['w_mask'])
-
-        is_true_tag = torch.eq(taken_actions, tag)
-        #0/1 reward (hamming loss) for each prediction.
-        rewards = is_true_tag.float() * w_mask
-        V_es = V_es * w_mask
-        Returns = torch.matmul(rewards, gM)
-        advantages = Returns - V_es
-        pos_neq = torch.ge(advantages, 0.0).float()
-        signs = torch.eq(pos_neq, rewards).float()
-
-        #Do not back propagate through Returns and V_es!
-        #biased advantage in favor of true tags, against wrong tags.
-        #if the advantage was negative for a true tag, or
-        #the advantage was positive for a wrong tag, make the advantages zero!
-        biased_advantages = signs * advantages
-        if hasCuda:
-            deltas = Variable(biased_advantages.data.cuda(), requires_grad=False)
-        else:
-            deltas = Variable(biased_advantages.data, requires_grad=False)
-
-        rlloss = -torch.mean(torch.mean(action_log_policies * deltas * w_mask, dim=1), dim=0)
-        vloss = self.V_loss(Returns, V_es)
-        return rlloss, vloss
 
     def Actor_Critic(self, V_es, taken_actions, action_log_policies):
         cfg = self.cfg

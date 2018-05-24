@@ -16,7 +16,6 @@ class Configuration(object):
 
     task = 'en_NER'
     #task = 'de_NER'
-    #task = 'POS'
     #task = 'CCG'
 
     """path to different files"""
@@ -33,7 +32,7 @@ class Configuration(object):
 
     """ Model Type """
     #Independent prediction of the tags.
-    #model_type = 'INDP'
+    model_type = 'INDP'
 
     #Conditional Random Field
     #model_type = 'CRF'
@@ -44,22 +43,16 @@ class Configuration(object):
     #Decoder RNN trained with scheduled sampling.
     #model_type = 'SS-RNN'
 
-    #Decoder RNN trained with differential scheduled sampling.
-    #model_type = 'DS-RNN'
-
     #Also specify k for decaying the sampling probability in inverse sigmoid schedule.
-    #Only for 'SS-RNN' and 'DS-RNN'
-    #k=25
-
-    #Decoder RNN trained using REINFORCE with baseline.
-    #model_type = 'BR-RNN'
+    #Only for 'SS-RNN'
+    #k=35
 
     #Decoder RNN trained with Actor-Critic.
     #model_type = 'AC-RNN'
 
     #For RL, you need to specify gamma and n-step.
-    #gamma = 0.9
-    #n_step = 4
+    #gamma = 0.8
+    #n_step = 2
 
     #For inference in decoder RNNs, we have greedy search or beam search.
     #Specify the beam size.

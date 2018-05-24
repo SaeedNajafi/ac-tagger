@@ -1,6 +1,5 @@
 # Tagger
 
-
 ## Requirements
 ``Python 2.7`` and ``PyTorch`` (http://pytorch.org/).
 
