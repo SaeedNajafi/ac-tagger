@@ -45,3 +45,22 @@ All configurations are manually set via the ``config.py`` file.
 
 ## License
 MIT license.
+
+## Please Cite
+```
+@article{DBLP:journals/corr/abs-1810-00428,
+  author    = {Saeed Najafi and
+               Colin Cherry and
+               Grzegorz Kondrak},
+  title     = {Efficient Sequence Labeling with Actor-Critic Training},
+  journal   = {CoRR},
+  volume    = {abs/1810.00428},
+  year      = {2018},
+  url       = {http://arxiv.org/abs/1810.00428},
+  archivePrefix = {arXiv},
+  eprint    = {1810.00428},
+  timestamp = {Tue, 30 Oct 2018 10:49:09 +0100},
+  biburl    = {https://dblp.org/rec/bib/journals/corr/abs-1810-00428},
+  bibsource = {dblp computer science bibliography, https://dblp.org}
+}
+```
